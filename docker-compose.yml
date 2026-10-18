@@ -1,0 +1,9 @@
+services:
+  visionguard-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: visionguard-web
+    ports:
+      - "8080:80"
+    restart: unless-stopped

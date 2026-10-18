@@ -1,0 +1,38 @@
+# Version Control
+.git/
+.gitignore
+
+# Flutter & Dart artifacts
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+
+# Mobile & Desktop platforms (hanya web yang dibutuhkan)
+android/
+ios/
+macos/
+windows/
+linux/
+
+# IDE & Editor configurations
+.idea/
+.vscode/
+*.iml
+
+# Test files & Documentation
+test/
+*.md
+
+# Sensitive files & Environment configurations
+.env*
+*.key
+*.pem
+*.keystore
+*.jks
+
+# Logs & Temporary files
+*.log
+.temp/
+.tmp/
