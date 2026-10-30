@@ -1,5 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/api_constants.dart';
+import '../../../core/network/api_client.dart';
+import '../data/api_auth_repository.dart';
 import '../data/auth_repository.dart';
 
 class AuthState {
@@ -40,7 +43,12 @@ class AuthState {
       );
 }
 
-final authRepositoryProvider = Provider<AuthRepository>((ref) => FakeAuthRepository());
+/// Beralih ke REST API dengan `ApiConstants.useRemoteApi` (default: tiruan).
+final authRepositoryProvider = Provider<AuthRepository>(
+  (ref) => ApiConstants.useRemoteApi
+      ? ApiAuthRepository(ref.watch(apiClientProvider))
+      : FakeAuthRepository(),
+);
 
 final authControllerProvider =
     NotifierProvider<AuthController, AuthState>(AuthController.new);
@@ -88,5 +96,11 @@ class AuthController extends Notifier<AuthState> {
 
   void acceptPrivacy() => state = state.copyWith(privacyAccepted: true);
 
-  void logout() => state = const AuthState();
+  /// State langsung direset agar UI kembali ke login; pencabutan token
+  /// berjalan di belakang dan tidak menahan UI walau offline.
+  Future<void> logout() async {
+    final repo = _repo;
+    state = const AuthState();
+    await repo.logout();
+  }
 }

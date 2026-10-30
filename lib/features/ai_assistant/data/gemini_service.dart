@@ -1,31 +1,23 @@
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
-/// Service asisten AI berbasis Gemini untuk memberikan saran kesehatan mata.
+import '../../../cv_engine/fatigue_scorer.dart';
+import 'ai_advice_repository.dart';
+
+/// Saran AI dengan memanggil Gemini **langsung dari klien**.
 ///
-/// Menerima data skor kelelahan dan metrik terkait, mengirimkannya ke Gemini,
-/// lalu mengembalikan teks saran yang bisa langsung ditampilkan di UI.
+/// ⚠️ **KHUSUS PENGEMBANGAN.** API key dibaca dari `.env` (`GEMINI_API_KEY`)
+/// yang ikut ter-bundle di aplikasi, sehingga dapat diekstrak dari build.
+/// Versi final **wajib** lewat backend (`ApiAiAdviceRepository`,
+/// POST /ai/advice) agar key hanya ada di server (DOCS_SPEC §17).
 ///
-/// API Key diambil otomatis dari file `.env` (key: `GEMINI_API_KEY`).
-/// Bisa juga di-override secara manual lewat parameter constructor.
-///
-/// Contoh penggunaan:
-/// ```dart
-/// // Otomatis dari .env:
-/// final gemini = GeminiService();
-///
-/// // Atau manual:
-/// final gemini = GeminiService(apiKey: 'YOUR_API_KEY');
-///
-/// final saran = await gemini.getHealthAdvice(fatigueScore: 75.0);
-/// print(saran); // "Istirahatkan mata Anda selama 10 menit..."
-/// ```
-class GeminiService {
-  GeminiService({
+/// Yang dikirim hanya [AdviceMetrics] (angka ringkasan), tanpa frame/gambar.
+class DirectGeminiAdviceRepository implements AiAdviceRepository {
+  DirectGeminiAdviceRepository({
     String? apiKey,
     this.isAiEnabled = true,
     String? modelName,
-  })  : _apiKey = apiKey ?? dotenv.env['GEMINI_API_KEY'] ?? '',
+  })  : _apiKey = apiKey ?? dotenv.maybeGet('GEMINI_API_KEY') ?? '',
         _modelName = modelName ?? 'gemini-2.0-flash';
 
   final String _apiKey;
@@ -57,45 +49,23 @@ class GeminiService {
     return _model!;
   }
 
-  /// Meminta saran kesehatan mata berdasarkan data kelelahan pengguna.
-  ///
-  /// Parameter:
-  /// - [fatigueScore] : skor kelelahan (0–100, makin tinggi makin lelah).
-  /// - [blinkRate]    : jumlah kedipan per menit (opsional).
-  /// - [perclos]      : persentase waktu mata tertutup (opsional).
-  /// - [screenMinutes]: durasi menatap layar dalam menit (opsional).
-  /// - [distanceCm]   : jarak mata ke layar dalam cm (opsional).
-  ///
-  /// Mengembalikan teks saran kesehatan.
-  /// Jika [isAiEnabled] == false, mengembalikan pesan fallback statis.
-  Future<String> getHealthAdvice({
-    required double fatigueScore,
-    double? blinkRate,
-    double? perclos,
-    double? screenMinutes,
-    double? distanceCm,
-  }) async {
-    // ---------- Feature Flag ----------
-    if (!isAiEnabled) {
-      return _fallbackAdvice(fatigueScore);
-    }
-
-    // ---------- Bangun prompt dengan data metrik ----------
+  /// Prompt hanya berisi angka ringkasan dari [metrics].
+  static String buildPrompt(AdviceMetrics metrics) {
     final buffer = StringBuffer()
       ..writeln('Berikut data kondisi mata pengguna saat ini:')
-      ..writeln('- Skor kelelahan: ${fatigueScore.toStringAsFixed(1)} / 100');
+      ..writeln('- Skor kelelahan: ${metrics.fatigueScore} / 100 (${metrics.level.label})');
 
-    if (blinkRate != null) {
-      buffer.writeln('- Frekuensi kedipan: ${blinkRate.toStringAsFixed(1)} kali/menit');
+    if (metrics.blinkRate != null) {
+      buffer.writeln('- Frekuensi kedipan: ${metrics.blinkRate!.toStringAsFixed(1)} kali/menit');
     }
-    if (perclos != null) {
-      buffer.writeln('- PERCLOS: ${(perclos * 100).toStringAsFixed(1)}%');
+    if (metrics.perclos != null) {
+      buffer.writeln('- PERCLOS: ${(metrics.perclos! * 100).toStringAsFixed(1)}%');
     }
-    if (screenMinutes != null) {
-      buffer.writeln('- Durasi menatap layar: ${screenMinutes.toStringAsFixed(0)} menit');
+    if (metrics.screenMinutes != null) {
+      buffer.writeln('- Durasi menatap layar: ${metrics.screenMinutes} menit');
     }
-    if (distanceCm != null) {
-      buffer.writeln('- Jarak ke layar: ${distanceCm.toStringAsFixed(0)} cm');
+    if (metrics.distanceCm != null) {
+      buffer.writeln('- Jarak ke layar: ${metrics.distanceCm!.toStringAsFixed(0)} cm');
     }
 
     buffer.writeln();
@@ -103,41 +73,30 @@ class GeminiService {
       'Berdasarkan data di atas, berikan 2–3 saran singkat dan praktis '
       'untuk menjaga kesehatan mata pengguna. Gunakan bahasa yang ramah dan mudah dipahami.',
     );
+    return buffer.toString();
+  }
+
+  @override
+  Future<String> getAdvice(AdviceMetrics metrics) async {
+    // ---------- Feature Flag ----------
+    if (!isAiEnabled || _apiKey.isEmpty) {
+      return StaticAdvice.forMetrics(metrics);
+    }
 
     try {
       final response = await _generativeModel.generateContent([
-        Content.text(buffer.toString()),
+        Content.text(buildPrompt(metrics)),
       ]);
 
       final text = response.text;
       if (text == null || text.trim().isEmpty) {
-        return _fallbackAdvice(fatigueScore);
+        return StaticAdvice.forMetrics(metrics);
       }
       return text.trim();
     } catch (e) {
       // Jika API gagal (jaringan, kuota habis, dsb.), kembalikan saran statis
       // agar UX tetap berjalan.
-      return _fallbackAdvice(fatigueScore);
-    }
-  }
-
-  /// Saran statis sebagai fallback saat AI dinonaktifkan atau API gagal.
-  static String _fallbackAdvice(double fatigueScore) {
-    if (fatigueScore >= 75) {
-      return '⚠️ Tingkat kelelahan mata Anda tinggi!\n'
-          '• Istirahatkan mata selama 10–15 menit.\n'
-          '• Terapkan aturan 20-20-20: setiap 20 menit, lihat objek sejauh 6 meter selama 20 detik.\n'
-          '• Pertimbangkan untuk berhenti bekerja di depan layar sementara waktu.';
-    } else if (fatigueScore >= 50) {
-      return '🟡 Mata Anda mulai menunjukkan tanda-tanda kelelahan.\n'
-          '• Kedipkan mata secara sadar beberapa kali.\n'
-          '• Pastikan jarak mata ke layar minimal 50 cm.\n'
-          '• Lakukan peregangan mata: lihat ke kiri, kanan, atas, dan bawah.';
-    } else {
-      return '✅ Kondisi mata Anda masih baik.\n'
-          '• Tetap jaga jarak aman ke layar.\n'
-          '• Ingat untuk berkedip secara teratur.\n'
-          '• Atur kecerahan layar agar nyaman di mata.';
+      return StaticAdvice.forMetrics(metrics);
     }
   }
 }

@@ -38,6 +38,12 @@ class CvConstants {
   static const double wTime = 0.2;
   static const double perclosMax = 0.15;
   static const double screenMinutesMax = 60;
+  // Level 0–39 Normal, 40–59 Waspada, 60–100 Lelah: lihat FatigueScorer.levelOf.
+
+  // ---- 2.5.4 / Tabel 2.6: Ambang pengingat ----
+  static const double minDistanceDesktopCm = 50; // pengingat jarak
+  static const double minDistanceMobileCm = 30;
+  static const double lowBlinkRatePerMin = 10; // pengingat kedip
 
   /// Jumlah landmark yang dihasilkan MediaPipe Face Landmarker (dengan iris).
   static const int landmarkCount = 478;

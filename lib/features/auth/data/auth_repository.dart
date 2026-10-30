@@ -1,8 +1,12 @@
 /// Kontrak akses data akun. Implementasi asli nantinya memanggil REST API
-/// Laravel + Sanctum (POST /api/login, /api/register).
+/// Laravel + Sanctum (POST /auth/login, /auth/register, /auth/logout),
+/// lihat `ApiAuthRepository`.
 abstract class AuthRepository {
   Future<AppUser> login(String email, String password);
   Future<AppUser> register(String name, String email, String password);
+
+  /// Mencabut token perangkat (UC-04). Tidak melempar exception walau offline.
+  Future<void> logout();
 }
 
 class AppUser {
@@ -58,4 +62,7 @@ class FakeAuthRepository implements AuthRepository {
     _users[key] = (name: name.trim(), password: password);
     return AppUser(name: name.trim(), email: key);
   }
+
+  @override
+  Future<void> logout() async {}
 }
