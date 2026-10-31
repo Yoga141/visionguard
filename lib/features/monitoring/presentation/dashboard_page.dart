@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router.dart';
 import '../../../app/theme.dart';
+import '../../../core/constants/cv_constants.dart';
 import '../../../cv_engine/fatigue_scorer.dart';
 import '../../../shared/widgets/camera_active_badge.dart';
 import '../../auth/application/auth_controller.dart';
@@ -30,20 +31,16 @@ class DashboardPage extends ConsumerWidget {
             const CameraActiveBadge()
           else if (m.mode == MonitoringMode.ai)
             const Center(child: SimulationModeBadge()),
+          // Logout ada di halaman Pengaturan.
           PopupMenuButton<String>(
             onSelected: (v) async {
               if (v == 'calib') {
                 await ctrl.stop();
                 if (context.mounted) context.go(Routes.calibration);
-              } else if (v == 'logout') {
-                await ctrl.stop();
-                ref.read(authControllerProvider.notifier).logout();
-                if (context.mounted) context.go(Routes.login);
               }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'calib', child: Text('Kalibrasi ulang')),
-              PopupMenuItem(value: 'logout', child: Text('Logout')),
             ],
           ),
         ],
@@ -59,6 +56,10 @@ class DashboardPage extends ConsumerWidget {
                 const SizedBox(height: 4),
                 Text(_modeLabel(m), style: theme.textTheme.bodyMedium),
                 const SizedBox(height: 16),
+                if (m.mode == MonitoringMode.ai && m.facePaused) ...[
+                  const _FaceLostBanner(),
+                  const SizedBox(height: 12),
+                ],
                 _ScoreMeter(score: m.fatigueScore, level: m.level, mode: m.mode),
                 const SizedBox(height: 16),
                 if (m.mode == MonitoringMode.timer)
@@ -101,14 +102,16 @@ class DashboardPage extends ConsumerWidget {
 
   String _modeLabel(MonitoringState m) => switch (m.mode) {
         MonitoringMode.idle => 'Pemantauan belum berjalan.',
-        MonitoringMode.ai => 'Pemantauan AI berjalan.',
+        MonitoringMode.ai => m.facePaused
+            ? 'Pemantauan AI dijeda — wajah tidak terdeteksi.'
+            : 'Pemantauan AI berjalan.',
         MonitoringMode.timer => 'Mode Timer 20-20-20 (tanpa kamera).',
       };
 }
 
 class _ScoreMeter extends StatelessWidget {
   const _ScoreMeter({required this.score, required this.level, required this.mode});
-  final double? score;
+  final int? score;
   final FatigueLevel? level;
   final MonitoringMode mode;
 
@@ -144,7 +147,7 @@ class _ScoreMeter extends StatelessWidget {
                   ),
                   Center(
                     child: Text(
-                      score?.toStringAsFixed(0) ?? '--',
+                      score?.toString() ?? '--',
                       style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -164,12 +167,37 @@ class _ScoreMeter extends StatelessWidget {
                           .headlineSmall
                           ?.copyWith(color: color, fontWeight: FontWeight.bold)),
                   const SizedBox(height: 4),
-                  Text('0–39 Normal • 40–59 Waspada • 60–100 Lelah',
+                  Text(
+                      '0–${CvConstants.levelWaspadaMin - 1} Normal • '
+                      '${CvConstants.levelWaspadaMin}–${CvConstants.levelLelahMin - 1} Waspada • '
+                      '${CvConstants.levelLelahMin}–100 Lelah',
                       style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// PMT-05: wajah tidak terdeteksi > 10 detik → perhitungan dijeda.
+class _FaceLostBanner extends StatelessWidget {
+  const _FaceLostBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Card(
+      color: scheme.errorContainer,
+      child: ListTile(
+        leading: Icon(Icons.face_retouching_off, color: scheme.onErrorContainer),
+        title: Text('Wajah tidak terdeteksi',
+            style: TextStyle(color: scheme.onErrorContainer, fontWeight: FontWeight.bold)),
+        subtitle: Text(
+          'Perhitungan dijeda. Posisikan wajah di depan kamera untuk melanjutkan.',
+          style: TextStyle(color: scheme.onErrorContainer),
         ),
       ),
     );

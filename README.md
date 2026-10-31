@@ -4,24 +4,33 @@ Aplikasi Flutter berbasis *computer vision* untuk deteksi dini dan pencegahan ke
 
 Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard v1.0.
 
-## Status: Progress 30%
+## Status: menuju Progress 50% (bagian 1 dari 3 selesai)
 
 | Fitur | Status | Acuan |
 |---|---|---|
 | Arsitektur folder berbasis Riverpod (feature-first) | ✅ | SDD 3.2 |
-| Login & Registrasi (repository tiruan) | ✅ | S-01, UC-01, UC-02 |
+| Login & Registrasi (repository tiruan; klien REST Laravel siap) | ✅ | S-01, UC-01, UC-02 |
 | Onboarding Privasi + penafian medis | ✅ | S-02, UC-06, KLB-01 |
 | Kalibrasi mata (baseline EAR, median 10 dtk) | ✅ | S-03, UC-07, KLB-02 |
 | Kalibrasi jarak (focal length) + opsi lewati | ✅ | S-03, UC-08, KLB-03 |
+| Kalibrasi tersimpan per kamera & minta ulang saat kamera diganti | ✅ | KLB-04 |
 | Dashboard: BR, PERCLOS, jarak, skor, status kredit | ✅ | S-04, PMT-02..04 |
+| Menu utama: Dashboard, Statistik, Kredit, Pengaturan (bottom nav / navigation rail) | ✅ | §7.4 |
 | CameraSource (kamera asli / fallback simulasi) | ✅ | SDD 4.1 |
 | Rumus EAR, blink rate, PERCLOS | ✅ | SDD 2.5.1 |
-| Estimasi jarak dari diameter iris | ✅ | SDD 2.5.2 |
-| Skor kelelahan 50:30:20 + level | ✅ | SDD 2.5.3 |
-| Mode Timer 20-20-20 | ✅ (dasar) | UC-12 |
-| Unit test rumus CV | ✅ | PML-01 |
+| Estimasi jarak dari diameter iris, dihaluskan median 1 detik | ✅ | SDD 2.5.2, §16 #6 |
+| Skor kelelahan 50:30:20 (int, dievaluasi tiap 10 detik) + level 40/60 | ✅ | SDD 2.5.3, §16 #7 |
+| Jeda perhitungan saat wajah tidak terdeteksi > 10 detik | ✅ | PMT-05 |
+| Mode Timer 20-20-20 (interval dari Pengaturan) | ✅ (dasar) | UC-12 |
+| Pengaturan: sensitivitas (τ 0,65/0,70/0,75), jenis pengingat, interval 10–60 mnt, reset bawaan | ✅ | S-10, PGT-01, UC-21 |
+| Akun di Pengaturan: info, Logout, Hapus Akun (konfirmasi; permanen setelah backend) | ✅ / ⏳ | AKN-02, AKN-04 |
+| Autostart | ⏳ tampil "segera hadir" | PGT-02 |
+| Database lokal SQLite (drift): kalibrasi, sesi, metrik per menit, pengingat, ringkasan, pengaturan | ✅ | §12.3, KDL-01 |
+| Saran AI (Gemini, khusus pengembangan) | ✅ (repository, belum di UI) | §17 |
+| Unit & widget test (CV, database, pengaturan, jaringan) | ✅ | PML-01 |
+| Halaman Statistik & Kredit | ⏳ placeholder | S-08, S-09 |
 | Deteksi wajah MediaPipe asli | ⏳ masih `DummyFaceAnalyzer` | SDD 4.1 |
-| Pengingat & cooldown, statistik, SQLite, backend Laravel, Midtrans | ⏳ | — |
+| Pengingat & cooldown, notifikasi, system tray, backend Laravel, Midtrans | ⏳ | — |
 
 ## Menjalankan
 

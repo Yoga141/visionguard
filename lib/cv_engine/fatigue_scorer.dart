@@ -26,7 +26,8 @@ class FatigueScorer {
   double timeComponent(double minutes) => _clamp01(minutes / CvConstants.screenMinutesMax);
 
   /// [blinkRate] per menit, [perclos] 0..1, [screenMinutes] menit tanpa istirahat.
-  double score({
+  /// Hasil dibulatkan ke int (SDD 4.1: `score(br, perclos, minutes): int`).
+  int score({
     required double blinkRate,
     required double perclos,
     required double screenMinutes,
@@ -34,13 +35,13 @@ class FatigueScorer {
     final s = CvConstants.wBlink * blinkComponent(blinkRate) +
         CvConstants.wPerclos * perclosComponent(perclos) +
         CvConstants.wTime * timeComponent(screenMinutes);
-    return 100 * s;
+    return (100 * s).round();
   }
 
-  /// 0–39 Normal, 40–59 Waspada, 60–100 Lelah.
-  static FatigueLevel levelOf(double score) {
-    if (score >= 60) return FatigueLevel.lelah;
-    if (score >= 40) return FatigueLevel.waspada;
+  /// 0–39 Normal, 40–59 Waspada, 60–100 Lelah (batas di [CvConstants]).
+  static FatigueLevel levelOf(int score) {
+    if (score >= CvConstants.levelLelahMin) return FatigueLevel.lelah;
+    if (score >= CvConstants.levelWaspadaMin) return FatigueLevel.waspada;
     return FatigueLevel.normal;
   }
 }

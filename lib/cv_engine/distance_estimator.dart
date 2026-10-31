@@ -1,6 +1,8 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 import '../core/constants/cv_constants.dart';
+import 'blink_analyzer.dart';
 import 'face_analyzer.dart';
 
 /// Mengubah lebar iris (piksel) menjadi jarak wajah ke layar
@@ -8,14 +10,14 @@ import 'face_analyzer.dart';
 ///
 ///   d = f · D_iris / w_iris          (jarak, mm)
 ///   f = w_iris · d_ref / D_iris      (focal length saat kalibrasi, piksel)
+///
+/// Lebar iris dihaluskan dengan **median 1 detik** terakhir (DFD 3.5.3).
 class DistanceEstimator {
-  DistanceEstimator({required this.focalLengthPx, this.smoothing = 0.3});
+  DistanceEstimator({required this.focalLengthPx});
 
   double focalLengthPx;
 
-  /// Faktor exponential moving average (0..1). Makin kecil makin halus.
-  final double smoothing;
-  double? _smoothedIrisPx;
+  final _samples = Queue<({DateTime t, double w})>();
 
   /// Lebar iris dalam piksel: rata-rata 469→471 (kanan) dan 474→476 (kiri).
   static double irisWidthPx(List<Point2> lm) {
@@ -53,11 +55,15 @@ class DistanceEstimator {
     }
     final w = irisWidthPx(frame.landmarks);
     if (w <= 0) return null;
-    _smoothedIrisPx = _smoothedIrisPx == null
-        ? w
-        : smoothing * w + (1 - smoothing) * _smoothedIrisPx!;
-    return distanceMm(focalLengthPx, _smoothedIrisPx!) / 10; // mm → cm
+    final now = frame.timestamp;
+    _samples.add((t: now, w: w));
+    final cutoff = now.subtract(CvConstants.irisMedianWindow);
+    while (_samples.first.t.isBefore(cutoff)) {
+      _samples.removeFirst();
+    }
+    final smoothed = BlinkAnalyzer.median([for (final s in _samples) s.w]);
+    return distanceMm(focalLengthPx, smoothed) / 10; // mm → cm
   }
 
-  void reset() => _smoothedIrisPx = null;
+  void reset() => _samples.clear();
 }

@@ -9,6 +9,7 @@ import '../../../cv_engine/camera_source.dart';
 import '../../../cv_engine/cv_providers.dart';
 import '../../../cv_engine/distance_estimator.dart';
 import '../../../cv_engine/face_analyzer.dart';
+import '../data/calibration_repository.dart';
 
 enum CalibrationStep { idle, preparing, ready, eyeRecording, eyeDone, distanceRecording, done }
 
@@ -22,6 +23,8 @@ class CalibrationState {
   final bool faceDetected;
   /// true hanya jika kamera asli benar-benar menyala (bukan mode simulasi).
   final bool usingRealCamera;
+  /// Kamera tempat [baselineEar] & [focalLengthPx] diukur (KLB-04).
+  final String? cameraId;
   final String? message;
 
   const CalibrationState({
@@ -33,11 +36,13 @@ class CalibrationState {
     this.liveEar,
     this.faceDetected = false,
     this.usingRealCamera = false,
+    this.cameraId,
     this.message,
   });
 
   bool get isComplete => baselineEar != null && focalLengthPx != null;
-  double? get tau => baselineEar == null ? null : CvConstants.tauFactor * baselineEar!;
+  /// τ = [tauFactor] × baseline; faktor mengikuti sensitivitas di Pengaturan.
+  double? tauFor(double tauFactor) => baselineEar == null ? null : tauFactor * baselineEar!;
 
   CalibrationState copyWith({
     CalibrationStep? step,
@@ -48,6 +53,7 @@ class CalibrationState {
     double? liveEar,
     bool? faceDetected,
     bool? usingRealCamera,
+    String? cameraId,
     String? message,
   }) =>
       CalibrationState(
@@ -59,6 +65,7 @@ class CalibrationState {
         liveEar: liveEar ?? this.liveEar,
         faceDetected: faceDetected ?? this.faceDetected,
         usingRealCamera: usingRealCamera ?? this.usingRealCamera,
+        cameraId: cameraId ?? this.cameraId,
         message: message ?? this.message,
       );
 }
@@ -68,8 +75,8 @@ final calibrationControllerProvider =
 
 /// CalibrationService (SDD 4.1, DFD Level 2 Proses 2.0, UC-07 & UC-08).
 ///
-/// Hasil kalibrasi saat ini disimpan di memori. Tahap berikutnya:
-/// disimpan ke SQLite (tabel `calibrations`, D3) via drift.
+/// Hasil kalibrasi disimpan ke SQLite (tabel `calibrations`, D3) per kamera
+/// dan dimuat kembali saat aplikasi dibuka ([restoreSaved]).
 class CalibrationController extends Notifier<CalibrationState> {
   StreamSubscription<CameraFrame>? _sub;
   bool _busy = false;
@@ -80,6 +87,7 @@ class CalibrationController extends Notifier<CalibrationState> {
 
   CameraSource get _camera => ref.read(cameraSourceProvider);
   FaceAnalyzer get _analyzer => ref.read(faceAnalyzerProvider);
+  CalibrationRepository get _repo => ref.read(calibrationRepositoryProvider);
 
   static double get referenceDistanceMm {
     final isMobile = defaultTargetPlatform == TargetPlatform.android ||
@@ -93,16 +101,69 @@ class CalibrationController extends Notifier<CalibrationState> {
     return const CalibrationState();
   }
 
+  /// Dipanggil saat aplikasi dibuka: memuat kalibrasi terbaru untuk kamera
+  /// yang akan dipakai, sehingga pengguna tidak perlu kalibrasi ulang.
+  /// [cameraId] hanya untuk test; default kamera yang akan dipakai [CameraSource].
+  Future<void> restoreSaved({String? cameraId}) async =>
+      _loadFor(cameraId ?? await CameraSource.resolveCameraId());
+
+  Future<bool> _loadFor(String cameraId) async {
+    try {
+      final saved = await _repo.latestFor(cameraId);
+      if (saved == null) return false;
+      state = CalibrationState(
+        step: CalibrationStep.done,
+        baselineEar: saved.earBaseline,
+        focalLengthPx: saved.focalPx,
+        usingRealCamera: state.usingRealCamera,
+        cameraId: cameraId,
+        message: 'Memakai kalibrasi tersimpan.',
+      );
+      return true;
+    } catch (e) {
+      debugPrint('Gagal memuat kalibrasi: $e');
+      return false;
+    }
+  }
+
+  Future<void> _persist() async {
+    final s = state;
+    if (!s.isComplete) return;
+    final cameraId = _camera.cameraId;
+    state = s.copyWith(cameraId: cameraId);
+    try {
+      await _repo.save(cameraId: cameraId, earBaseline: s.baselineEar!, focalPx: s.focalLengthPx!);
+    } catch (e) {
+      debugPrint('Gagal menyimpan kalibrasi: $e');
+    }
+  }
+
   Future<void> startCamera() async {
     if (_sub != null) return;
     state = state.copyWith(step: CalibrationStep.preparing, message: 'Menyiapkan kamera dan model...');
     await _analyzer.load();
     await _camera.start();
     _sub = _camera.frames.listen(_onFrame);
+
+    // KLB-04: kalibrasi milik kamera lain → pakai kalibrasi kamera ini bila
+    // ada, selain itu minta kalibrasi ulang.
+    final cameraId = _camera.cameraId;
+    var cameraChanged = false;
+    if (state.cameraId != null && state.cameraId != cameraId && !await _loadFor(cameraId)) {
+      cameraChanged = true;
+      state = const CalibrationState(step: CalibrationStep.preparing);
+    }
+
     state = state.copyWith(
-      step: state.baselineEar == null ? CalibrationStep.ready : CalibrationStep.eyeDone,
+      step: state.isComplete
+          ? CalibrationStep.done
+          : state.baselineEar == null
+              ? CalibrationStep.ready
+              : CalibrationStep.eyeDone,
       usingRealCamera: _camera.usingRealCamera,
-      message: !_camera.usingRealCamera
+      message: cameraChanged
+          ? 'Kamera berbeda terdeteksi. Lakukan kalibrasi ulang.'
+          : !_camera.usingRealCamera
           ? 'Kamera tidak tersedia — memakai frame simulasi.'
           : _camera.streamingRealFrames
               ? 'Kamera aktif. Posisikan wajah di tengah layar.'
@@ -146,6 +207,7 @@ class CalibrationController extends Notifier<CalibrationState> {
       focalIsEstimated: true,
       message: 'Kalibrasi jarak dilewati (akurasi lebih rendah).',
     );
+    _persist();
   }
 
   void reset() {
@@ -230,5 +292,6 @@ class CalibrationController extends Notifier<CalibrationState> {
       focalIsEstimated: false,
       message: 'Kalibrasi berhasil!',
     );
+    _persist();
   }
 }

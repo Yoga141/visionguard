@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router.dart';
 import '../../../cv_engine/cv_providers.dart';
 import '../../../shared/widgets/camera_active_badge.dart';
+import '../../settings/application/settings_controller.dart';
 import '../application/calibration_controller.dart';
 
 /// S-03 Kalibrasi (UC-07 Kalibrasi Mata, UC-08 Kalibrasi Jarak).
@@ -72,10 +73,14 @@ class _CalibrationPageState extends ConsumerState<CalibrationPage> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('EAR langsung: ${s.liveEar?.toStringAsFixed(3) ?? '-'}'),
-                    Text(s.faceDetected ? 'Wajah terdeteksi' : 'Mencari wajah...',
-                        style: TextStyle(
-                            color: s.faceDetected ? Colors.green : theme.colorScheme.error)),
+                    Flexible(child: Text('EAR langsung: ${s.liveEar?.toStringAsFixed(3) ?? '-'}')),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(s.faceDetected ? 'Wajah terdeteksi' : 'Mencari wajah...',
+                          textAlign: TextAlign.end,
+                          style: TextStyle(
+                              color: s.faceDetected ? Colors.green : theme.colorScheme.error)),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
@@ -89,7 +94,9 @@ class _CalibrationPageState extends ConsumerState<CalibrationPage> {
                 ..._actions(context, s, refCm),
                 if (s.baselineEar != null || s.focalLengthPx != null) ...[
                   const SizedBox(height: 24),
-                  _ResultCard(state: s),
+                  _ResultCard(
+                      state: s,
+                      tauFactor: ref.watch(settingsControllerProvider).sensitivity.tauFactor),
                 ],
               ],
             ),
@@ -247,8 +254,9 @@ class _Preview extends StatelessWidget {
 }
 
 class _ResultCard extends StatelessWidget {
-  const _ResultCard({required this.state});
+  const _ResultCard({required this.state, required this.tauFactor});
   final CalibrationState state;
+  final double tauFactor;
 
   @override
   Widget build(BuildContext context) {
@@ -261,7 +269,8 @@ class _ResultCard extends StatelessWidget {
             Text('Hasil Kalibrasi', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
             Text('Baseline EAR (median): ${state.baselineEar?.toStringAsFixed(3) ?? '-'}'),
-            Text('Ambang mata tertutup τ = 0,7 × baseline: ${state.tau?.toStringAsFixed(3) ?? '-'}'),
+            Text('Ambang mata tertutup τ = ${tauFactor.toStringAsFixed(2).replaceAll('.', ',')} × baseline: '
+                '${state.tauFor(tauFactor)?.toStringAsFixed(3) ?? '-'}'),
             Text('Focal length: ${state.focalLengthPx?.toStringAsFixed(1) ?? '-'} px'
                 '${state.focalIsEstimated ? ' (perkiraan FOV 60°)' : ''}'),
           ],

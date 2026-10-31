@@ -28,7 +28,7 @@ class AdviceMetrics {
   /// Menit menatap layar tanpa istirahat.
   final int? screenMinutes;
 
-  FatigueLevel get level => FatigueScorer.levelOf(fatigueScore.toDouble());
+  FatigueLevel get level => FatigueScorer.levelOf(fatigueScore);
 
   /// Body JSON untuk POST /ai/advice (snake_case, §17).
   Map<String, Object?> toJson() => {

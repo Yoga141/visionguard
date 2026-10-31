@@ -30,7 +30,11 @@ class CameraFrame {
 /// kelas ini beralih ke mode simulasi yang mengirim frame kosong sesuai fps
 /// target, sehingga seluruh pipeline tetap bisa didemokan.
 class CameraSource {
+  /// `cameraId` untuk mode simulasi (tanpa kamera asli).
+  static const simulatedCameraId = 'simulated';
+
   CameraController? _controller;
+  String _cameraId = simulatedCameraId;
   Timer? _simTimer;
   final _frames = StreamController<CameraFrame>.broadcast();
   DateTime _lastEmit = DateTime.fromMillisecondsSinceEpoch(0);
@@ -42,6 +46,25 @@ class CameraSource {
   CameraController? get controller => _controller;
   bool get isRunning => _running;
   bool get usingRealCamera => _usingRealCamera;
+
+  /// Identitas kamera yang sedang dipakai (SDD 4.1 `-cameraId`), untuk
+  /// kalibrasi per kamera (KLB-04). [simulatedCameraId] bila tanpa kamera asli.
+  String get cameraId => _usingRealCamera ? _cameraId : simulatedCameraId;
+
+  /// Kamera yang akan dipakai [start], tanpa menyalakannya.
+  static Future<String> resolveCameraId() async {
+    try {
+      final cams = await availableCameras();
+      return cams.isEmpty ? simulatedCameraId : _pick(cams).name;
+    } catch (_) {
+      return simulatedCameraId;
+    }
+  }
+
+  static CameraDescription _pick(List<CameraDescription> cams) => cams.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.front,
+        orElse: () => cams.first,
+      );
 
   int get targetFps {
     final isMobile = defaultTargetPlatform == TargetPlatform.android ||
@@ -58,10 +81,7 @@ class CameraSource {
     try {
       final cams = await availableCameras();
       if (cams.isEmpty) throw CameraException('no_camera', 'Kamera tidak ditemukan');
-      final front = cams.firstWhere(
-        (c) => c.lensDirection == CameraLensDirection.front,
-        orElse: () => cams.first,
-      );
+      final front = _pick(cams);
       controller = CameraController(
         front,
         ResolutionPreset.medium, // ~640x480
@@ -74,6 +94,7 @@ class CameraSource {
         return;
       }
       _controller = controller;
+      _cameraId = front.name;
       _usingRealCamera = true;
       lastError = null;
 
