@@ -61,6 +61,39 @@ class CvConstants {
   static const int rule202020MinMin = 10;
   static const int rule202020MaxMin = 60;
 
+  // ---- Tabel 2.6 lanjutan: pemicu, durasi kondisi & cooldown (PNG-01..07) ----
+  /// Pengingat istirahat bila skor ≥ ambang ini (= batas level Lelah).
+  static const int restReminderScore = levelLelahMin;
+  static const Duration restCooldown = Duration(minutes: 20);
+  /// Jarak harus di bawah ambang terus-menerus selama ini.
+  static const Duration tooCloseHold = Duration(seconds: 10);
+  static const Duration distanceCooldown = Duration(minutes: 5);
+  /// BR harus di bawah ambang terus-menerus selama ini.
+  static const Duration lowBlinkHold = Duration(minutes: 3);
+  static const Duration blinkCooldown = Duration(minutes: 10);
+
+  // ---- Pop-up pengingat (§9.5, USB-02) ----
+  /// Pop-up yang tidak direspons hilang dan dicatat `dismissed`.
+  static const Duration reminderAutoDismiss = Duration(seconds: 15);
+  /// Lama hasil verifikasi istirahat ditampilkan sebelum pop-up ditutup.
+  static const Duration breakResultVisible = Duration(seconds: 4);
+
+  // ---- Verifikasi istirahat 20-20-20 (§9.6, UC-14, PNG-05) ----
+  static const Duration breakCountdown = Duration(seconds: 20);
+  /// Terverifikasi bila wajah hilang / |yaw| > [maxHeadYawDeg] selama minimal ini.
+  static const Duration breakVerifyMin = Duration(seconds: 15);
+
+  // ---- Tunda & Mode Fokus (§9.7, UC-15, PNG-06) ----
+  static const List<int> snoozeOptionsMin = [15, 30, 60];
+  /// Pilihan durasi Mode Fokus (keputusan pengguna 31 Okt 2026, DOCS_SPEC §16 #16).
+  static const List<int> focusOptionsMin = [30, 60, 90, 120];
+
+  // ---- Opsi demo (hanya dengan DummyFaceAnalyzer) ----
+  /// Interval 20-20-20 saat opsi debug "percepat" aktif.
+  static const int debugRule202020Min = 1;
+  /// Jarak wajah tiruan saat "Simulasi terlalu dekat" (di bawah ambang desktop & mobile).
+  static const double demoTooCloseDistanceMm = 250;
+
   /// Jumlah landmark yang dihasilkan MediaPipe Face Landmarker (dengan iris).
   static const int landmarkCount = 478;
 }

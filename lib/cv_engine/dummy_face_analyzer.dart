@@ -23,6 +23,9 @@ class DummyFaceAnalyzer implements FaceAnalyzer {
   /// kelelahan naik ke Waspada/Lelah saat presentasi.
   bool simulateFatigue = false;
 
+  /// Mode demo: wajah sangat dekat ke layar, agar pengingat jarak muncul.
+  bool simulateTooClose = false;
+
   DateTime? _start;
   DateTime? _nextBlink;
   DateTime? _blinkEnd;
@@ -68,7 +71,9 @@ class DummyFaceAnalyzer implements FaceAnalyzer {
     }
 
     // --- Jarak simulasi (mm) bergerak perlahan ---
-    final distanceMm = 525 + 125 * math.sin(elapsedS / 8);
+    final distanceMm = simulateTooClose
+        ? CvConstants.demoTooCloseDistanceMm + 10 * math.sin(elapsedS / 3)
+        : 525 + 125 * math.sin(elapsedS / 8);
     final irisPx = simulatedFocalPx * CvConstants.irisDiameterMm / distanceMm;
 
     final lm = List<Point2>.filled(CvConstants.landmarkCount, Point2.zero);

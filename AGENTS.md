@@ -22,7 +22,8 @@ VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi
 - **Jaringan:** `dio` (REST JSON ke Laravel) + `flutter_secure_storage` (token Sanctum). Belum terhubung ke server sungguhan.
 - **Saran AI (fitur tambahan, DOCS_SPEC §17):** `google_generative_ai` + `flutter_dotenv` (`GEMINI_API_KEY` di `.env`). Pemanggilan langsung dari klien **khusus pengembangan**; versi final wajib lewat backend `POST /ai/advice`.
 - **Database lokal:** SQLite via `drift` + `drift_flutter` (file di folder `getApplicationSupportDirectory` dari `path_provider`), skema persis DOCS_SPEC §12.3. Kode `app_database.g.dart` dihasilkan `drift_dev` + `build_runner`.
-- Direncanakan (masih dikomentari di `pubspec.yaml`): `tflite_flutter`, `flutter_local_notifications`
+- **Notifikasi pengingat:** `flutter_local_notifications` 22.x (Windows & Android, aksi Tunda). Gagal/tidak didukung/izin ditolak → pop-up dalam aplikasi. Android memakai *core library desugaring* & izin `POST_NOTIFICATIONS`.
+- Direncanakan (masih dikomentari di `pubspec.yaml`): `tflite_flutter`
 - **Firebase tidak dipakai** (DOCS_SPEC §16 #13). Jangan menambahkannya kembali tanpa izin.
 
 ## 4. Struktur `lib/`
@@ -34,6 +35,7 @@ lib/
 │                         # main_shell.dart (menu utama §7.4: bottom nav / navigation rail)
 ├── core/
 │   ├── constants/        # cv_constants.dart — satu-satunya tempat konstanta CV & ambang pengingat
+│   │                     # (termasuk cooldown, durasi kondisi, tunda/Mode Fokus, opsi demo)
 │   │                     # api_constants.dart — base URL, flag useRemoteApi, timeout
 │   ├── database/         # app_database.dart (6 tabel §12.3) + app_database.g.dart (generated),
 │   │                     # database_providers.dart (appDatabaseProvider, dayKey)
@@ -57,6 +59,15 @@ lib/
 │   │                     # retensi 30 hari, ringkasan harian), alert_repository;
 │   │                     # monitoring_controller, dashboard_page
 │   ├── onboarding/       # privacy_onboarding_page
+│   ├── reminders/        # Pengingat PNG-01..07: domain/reminder.dart (ReminderType berurutan
+│   │                     # prioritas + pesan §9.5, ReminderMetrics);
+│   │                     # application/rule_engine.dart (aturan, durasi kondisi, cooldown),
+│   │                     # timer_service.dart (waktu layar 20-20-20, Mode AI & Timer),
+│   │                     # break_verifier.dart (≥15/20 dtk berpaling), reminder_hold.dart
+│   │                     # (Tunda & Mode Fokus), reminder_controller.dart (ReminderService:
+│   │                     # pop-up, auto-dismiss 15 dtk, catat ke alerts);
+│   │                     # data/notification_service.dart (flutter_local_notifications);
+│   │                     # presentation/reminder_popup.dart (overlay kanan bawah, ExcludeFocus)
 │   ├── settings/         # data/settings_repository (key-value),
 │   │                     # application/settings_controller (AppSettings, Sensitivity → τ),
 │   │                     # presentation/settings_page (S-10, akun & logout)
@@ -65,7 +76,9 @@ lib/
     └── widgets/          # camera_active_badge.dart, coming_soon.dart
 ```
 
-Test ada di `test/` (`cv_engine_test.dart`, `network_test.dart`, `ai_advice_test.dart`, `database_test.dart`, `local_storage_flow_test.dart`, `settings_test.dart`, `widget_test.dart`). Test database memakai SQLite in-memory (`AppDatabase(NativeDatabase.memory())`, override `appDatabaseProvider`).
+Test ada di `test/` (`cv_engine_test.dart`, `network_test.dart`, `ai_advice_test.dart`, `database_test.dart`, `local_storage_flow_test.dart`, `settings_test.dart`, `reminders_test.dart`, `widget_test.dart`). Test pengingat memakai `FakeNotifier` (override `systemNotifierProvider`) dan jam tiruan (override `reminderClockProvider`). Test database memakai SQLite in-memory (`AppDatabase(NativeDatabase.memory())`, override `appDatabaseProvider`).
+
+**Alur pengingat:** `MonitoringController` memanggil `RuleEngine.evaluate` tiap evaluasi 10 detik `SessionEvaluator` (Mode AI) atau tiap detak `TimerService` saat 20-20-20 jatuh tempo (Mode Timer) → `ReminderController.show` (hanya satu sekaligus; ditolak saat Tunda/Mode Fokus, dan cooldown baru dimulai bila benar-benar tampil). Pop-up dipasang di `MaterialApp.builder` (`ReminderOverlay`). Opsi demo (simulasi mata lelah, simulasi terlalu dekat, percepat 20-20-20 ke 1 menit) hanya tampil dengan `DummyFaceAnalyzer`.
 
 **Beralih ke backend asli:** selama `ApiConstants.useRemoteApi == false`, auth memakai `FakeAuthRepository` dan Saran AI memakai `DirectGeminiAdviceRepository`. Saat backend siap, jalankan dengan `--dart-define=USE_REMOTE_API=true --dart-define=API_BASE_URL=https://.../api` (beralih ke `ApiAuthRepository` dan `ApiAiAdviceRepository`).
 

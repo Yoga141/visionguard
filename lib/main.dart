@@ -6,6 +6,7 @@ import 'app/app.dart';
 import 'features/calibration/application/calibration_controller.dart';
 import 'features/monitoring/data/metrics_repository.dart';
 import 'features/monitoring/data/session_repository.dart';
+import 'features/reminders/data/notification_service.dart';
 import 'features/settings/application/settings_controller.dart';
 
 /// Titik masuk aplikasi VisionGuard.
@@ -16,7 +17,7 @@ import 'features/settings/application/settings_controller.dart';
 ///    khusus pengembangan; lihat DOCS_SPEC §17).
 /// 3. Database lokal (DOCS_SPEC §12.3) — memuat pengaturan & kalibrasi
 ///    tersimpan, menutup sesi yang tertinggal terbuka, dan menghapus metrik
-///    > 30 hari.
+///    > 30 hari, lalu menyiapkan notifikasi sistem pengingat.
 /// 4. [runApp] — menjalankan aplikasi di dalam [UncontrolledProviderScope]
 ///    agar semua provider Riverpod dapat diakses dari mana saja.
 void main() async {
@@ -40,4 +41,7 @@ Future<void> prepareLocalData(ProviderContainer container) async {
   }
   await container.read(settingsControllerProvider.notifier).load();
   await container.read(calibrationControllerProvider.notifier).restoreSaved();
+  // Notifikasi sistem pengingat (Windows & Android); gagal → pop-up saja.
+  final notifier = container.read(systemNotifierProvider);
+  if (notifier is LocalSystemNotifier) await notifier.init();
 }

@@ -9,6 +9,7 @@ import '../../../cv_engine/fatigue_scorer.dart';
 import '../../../shared/widgets/camera_active_badge.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../calibration/application/calibration_controller.dart';
+import '../../reminders/application/reminder_controller.dart';
 import '../application/monitoring_controller.dart';
 
 /// S-04 Dashboard: tombol Mulai/Stop, BR, jarak, meteran skor, status kredit.
@@ -21,6 +22,7 @@ class DashboardPage extends ConsumerWidget {
     final ctrl = ref.read(monitoringControllerProvider.notifier);
     final auth = ref.watch(authControllerProvider);
     final calibrated = ref.watch(calibrationControllerProvider).isComplete;
+    final reminders = ref.watch(reminderControllerProvider);
     final theme = Theme.of(context);
 
     return Scaffold(
@@ -64,8 +66,17 @@ class DashboardPage extends ConsumerWidget {
                 const SizedBox(height: 16),
                 if (m.mode == MonitoringMode.timer)
                   _TimerCard(seconds: m.secondsToNext202020)
-                else
+                else ...[
                   _MetricsGrid(state: m),
+                  if (m.mode == MonitoringMode.ai) ...[
+                    const SizedBox(height: 12),
+                    _TimerCard(seconds: m.secondsToNext202020, compact: true),
+                  ],
+                ],
+                if (m.mode != MonitoringMode.idle) ...[
+                  const SizedBox(height: 12),
+                  _FocusCard(state: reminders),
+                ],
                 const SizedBox(height: 16),
                 _StartStopButton(state: m, calibrated: calibrated, ctrl: ctrl),
                 if (m.message != null) ...[
@@ -74,14 +85,10 @@ class DashboardPage extends ConsumerWidget {
                 ],
                 const SizedBox(height: 16),
                 _CreditCard(state: m, onAddDemoCredit: ctrl.addDemoCredit),
-                if (m.mode == MonitoringMode.ai && ctrl.canSimulateFatigue) ...[
+                // Opsi demo hanya saat memakai DummyFaceAnalyzer.
+                if (m.mode != MonitoringMode.idle && ctrl.canSimulateFatigue) ...[
                   const SizedBox(height: 8),
-                  SwitchListTile(
-                    title: const Text('Simulasi mata lelah (demo)'),
-                    subtitle: const Text('Kedipan jarang & mata sering tertutup lama'),
-                    value: m.simulatingFatigue,
-                    onChanged: ctrl.setFatigueSimulation,
-                  ),
+                  _DemoCard(state: m, ctrl: ctrl),
                 ],
                 if (m.mode == MonitoringMode.ai) ...[
                   const SizedBox(height: 12),
@@ -278,13 +285,25 @@ class _Metric extends StatelessWidget {
 }
 
 class _TimerCard extends StatelessWidget {
-  const _TimerCard({required this.seconds});
+  const _TimerCard({required this.seconds, this.compact = false});
   final int seconds;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final mm = (seconds ~/ 60).toString().padLeft(2, '0');
     final ss = (seconds % 60).toString().padLeft(2, '0');
+    if (compact) {
+      return Card(
+        margin: EdgeInsets.zero,
+        child: ListTile(
+          leading: const Icon(Icons.landscape_outlined),
+          title: const Text('Pengingat 20-20-20 berikutnya'),
+          trailing: Text('$mm:$ss',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+        ),
+      );
+    }
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(20),
@@ -356,6 +375,111 @@ class _CreditCard extends StatelessWidget {
           icon: const Icon(Icons.add_circle_outline),
           onPressed: onAddDemoCredit,
         ),
+      ),
+    );
+  }
+}
+
+String _hhmm(DateTime t) =>
+    '${t.hour.toString().padLeft(2, '0')}.${t.minute.toString().padLeft(2, '0')}';
+
+/// Tunda & Mode Fokus (UC-15, PNG-06): semua pengingat ditahan selama durasi.
+class _FocusCard extends ConsumerWidget {
+  const _FocusCard({required this.state});
+  final ReminderState state;
+
+  Future<void> _pickDuration(BuildContext context, ReminderController ctrl) async {
+    final minutes = await showDialog<int>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Mode Fokus'),
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 0, 24, 8),
+            child: Text('Semua pengingat ditahan selama durasi yang dipilih.'),
+          ),
+          for (final m in CvConstants.focusOptionsMin)
+            SimpleDialogOption(
+              onPressed: () => Navigator.pop(context, m),
+              child: Text('$m menit'),
+            ),
+        ],
+      ),
+    );
+    if (minutes != null) ctrl.startFocus(minutes);
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ctrl = ref.read(reminderControllerProvider.notifier);
+    final focus = state.focusUntil;
+    final snooze = state.snoozedUntil;
+    return Card(
+      margin: EdgeInsets.zero,
+      child: Column(
+        children: [
+          ListTile(
+            leading: Icon(focus != null ? Icons.do_not_disturb_on : Icons.do_not_disturb_on_outlined),
+            title: Text(focus != null ? 'Mode Fokus aktif hingga ${_hhmm(focus)}' : 'Mode Fokus'),
+            subtitle: Text(focus != null
+                ? 'Semua pengingat ditahan.'
+                : 'Tahan semua pengingat selama ${CvConstants.focusOptionsMin.join('/')} menit.'),
+            trailing: focus != null
+                ? TextButton(onPressed: ctrl.endFocus, child: const Text('Akhiri'))
+                : TextButton(
+                    onPressed: () => _pickDuration(context, ctrl), child: const Text('Mulai')),
+          ),
+          if (snooze != null)
+            ListTile(
+              leading: const Icon(Icons.snooze),
+              title: Text('Pengingat ditunda hingga ${_hhmm(snooze)}'),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Opsi demo/debug, hanya tampil dengan DummyFaceAnalyzer.
+class _DemoCard extends StatelessWidget {
+  const _DemoCard({required this.state, required this.ctrl});
+  final MonitoringState state;
+  final MonitoringController ctrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final ai = state.mode == MonitoringMode.ai;
+    return Card(
+      child: Column(
+        children: [
+          ListTile(
+            dense: true,
+            leading: const Icon(Icons.science_outlined),
+            title: const Text('Opsi demo (analyzer simulasi)'),
+            subtitle: const Text('Tidak tersedia saat memakai MediaPipe.'),
+          ),
+          if (ai) ...[
+            SwitchListTile(
+              title: const Text('Simulasi mata lelah (demo)'),
+              subtitle: const Text('Kedipan jarang & mata sering tertutup lama'),
+              value: state.simulatingFatigue,
+              onChanged: ctrl.setFatigueSimulation,
+            ),
+            SwitchListTile(
+              title: const Text('Simulasi terlalu dekat (demo)'),
+              subtitle: Text('Wajah tiruan ±${(CvConstants.demoTooCloseDistanceMm / 10).round()} cm '
+                  'dari layar → pengingat jarak'),
+              value: state.simulatingTooClose,
+              onChanged: ctrl.setTooCloseSimulation,
+            ),
+          ],
+          SwitchListTile(
+            title: const Text('Percepat 20-20-20 (debug)'),
+            subtitle: Text('Interval menjadi ${CvConstants.debugRule202020Min} menit'),
+            value: state.fast202020,
+            onChanged: ctrl.setFast202020,
+          ),
+        ],
       ),
     );
   }

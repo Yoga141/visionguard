@@ -4,7 +4,7 @@ Aplikasi Flutter berbasis *computer vision* untuk deteksi dini dan pencegahan ke
 
 Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard v1.0.
 
-## Status: menuju Progress 50% (bagian 1 dari 3 selesai)
+## Status: menuju Progress 50% (bagian 2 dari 3 selesai)
 
 | Fitur | Status | Acuan |
 |---|---|---|
@@ -21,16 +21,24 @@ Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard 
 | Estimasi jarak dari diameter iris, dihaluskan median 1 detik | ✅ | SDD 2.5.2, §16 #6 |
 | Skor kelelahan 50:30:20 (int, dievaluasi tiap 10 detik) + level 40/60 | ✅ | SDD 2.5.3, §16 #7 |
 | Jeda perhitungan saat wajah tidak terdeteksi > 10 detik | ✅ | PMT-05 |
-| Mode Timer 20-20-20 (interval dari Pengaturan) | ✅ (dasar) | UC-12 |
+| Mode Timer 20-20-20 (TimerService, interval dari Pengaturan) | ✅ | UC-12 |
+| RuleEngine: Istirahat > Jarak > Kedip > 20-20-20, durasi kondisi, cooldown 20/5/10 mnt, satu pengingat sekaligus | ✅ | §9.5, PNG-01..03, PNG-07 |
+| TimerService: waktu layar kontinu (Mode AI & Timer, dijeda saat wajah hilang) | ✅ | Seq 4.23 |
+| Pop-up pengingat kanan bawah: Oke/Tunda, tanpa ambil fokus, hilang 15 dtk → `dismissed` | ✅ | S-05, USB-02, UC-13 |
+| Notifikasi sistem (Windows & Android) + aksi Tunda; cadangan pop-up | ✅ | S-06, §4.2 |
+| Istirahat 20-20-20: hitung mundur 20 dtk + verifikasi kamera (≥ 15 dtk berpaling) | ✅ | PNG-04, PNG-05, UC-14 |
+| Tunda 15/30/60 mnt & Mode Fokus 30/60/90/120 mnt (dari Dashboard, bisa diakhiri) | ✅ | PNG-06, UC-15 |
+| Pencatatan respons pengingat ke tabel `alerts` | ✅ | D5, UC-13 |
+| Opsi demo: simulasi mata lelah, simulasi terlalu dekat, percepat 20-20-20 (1 mnt) | ✅ (hanya analyzer simulasi) | — |
 | Pengaturan: sensitivitas (τ 0,65/0,70/0,75), jenis pengingat, interval 10–60 mnt, reset bawaan | ✅ | S-10, PGT-01, UC-21 |
 | Akun di Pengaturan: info, Logout, Hapus Akun (konfirmasi; permanen setelah backend) | ✅ / ⏳ | AKN-02, AKN-04 |
 | Autostart | ⏳ tampil "segera hadir" | PGT-02 |
 | Database lokal SQLite (drift): kalibrasi, sesi, metrik per menit, pengingat, ringkasan, pengaturan | ✅ | §12.3, KDL-01 |
 | Saran AI (Gemini, khusus pengembangan) | ✅ (repository, belum di UI) | §17 |
-| Unit & widget test (CV, database, pengaturan, jaringan) | ✅ | PML-01 |
+| Unit & widget test (CV, database, pengaturan, jaringan, pengingat) | ✅ | PML-01 |
 | Halaman Statistik & Kredit | ⏳ placeholder | S-08, S-09 |
 | Deteksi wajah MediaPipe asli | ⏳ masih `DummyFaceAnalyzer` | SDD 4.1 |
-| Pengingat & cooldown, notifikasi, system tray, backend Laravel, Midtrans | ⏳ | — |
+| System tray (jeda/lanjut, Mode Fokus dari tray), backend Laravel, Midtrans | ⏳ | S-11 |
 
 ## Menjalankan
 
@@ -61,10 +69,12 @@ lib/
 │   ├── auth/         (data, application, presentation)
 │   ├── onboarding/   (presentation)
 │   ├── calibration/  (application, presentation)
-│   └── monitoring/   (application, presentation)
+│   ├── monitoring/   (application, presentation)
+│   └── reminders/    (domain, application, data, presentation) — RuleEngine, TimerService, pop-up
 └── shared/widgets/                   # widget bersama (badge kamera aktif)
 test/
 ├── cv_engine_test.dart               # uji rumus EAR, jarak, skor
+├── reminders_test.dart               # RuleEngine, TimerService, tunda/fokus, verifikasi istirahat
 └── widget_test.dart
 ```
 

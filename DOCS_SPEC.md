@@ -696,6 +696,9 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 12 | KLB-04: `calibrations` per `camera_id`; kamera diganti → minta kalibrasi ulang. | Simpan `camera_id` dan bandingkan saat kamera dibuka. |
 | 13 | Kode sempat memakai **Firebase** (Auth + Firestore) untuk login & log metrik, di luar SDD Tabel 3.1. | **Keputusan pengguna (29 Okt 2026): Firebase tidak dipakai.** Backend tetap **Laravel + Sanctum + MySQL** (§4.2, §11, §12). Kode & konfigurasi Firebase sudah dihapus. |
 | 14 | Fitur **Saran AI (Gemini)** tidak ada di SRS/SDD v1.0. | Dipertahankan sebagai fitur tambahan, lihat **§17**. SRS/SDD perlu direvisi. |
+| 15 | Tabel `alerts` tidak punya kolom hasil verifikasi istirahat 20-20-20 (§9.6 "catat terverifikasi / tidak"). | **Keputusan pengguna (31 Okt 2026):** terverifikasi (atau Mode Timer, verifikasi dilewati) → `action = followed` (dihitung `breaks_taken`); tidak terverifikasi → `dismissed`. Skema §12.3 tidak berubah. |
+| 16 | Durasi **Mode Fokus** tidak ditentukan (§9.7 hanya "pilih durasi"). | **Keputusan pengguna (31 Okt 2026): 30 / 60 / 90 / 120 menit** (`CvConstants.focusOptionsMin`). Sementara dimulai dari **Dashboard** karena system tray belum ada. |
+| 17 | Detail interaksi pengingat yang tidak dirinci SDD. | **Diterapkan:** cooldown dimulai saat pengingat benar-benar tampil (bukan saat ditahan Tunda/Fokus); jarak & BR harus di bawah ambang **terus-menerus** (dilacak per frame, diputuskan tiap 10 dtk); pada 20-20-20, tombol **Oke** memulai hitung mundur 20 dtk; 20-20-20 yang diabaikan juga mereset timer (agar tidak muncul berulang), yang ditunda muncul lagi setelah masa tunda; notifikasi sistem dikirim bila diaktifkan, bila tidak didukung/izin ditolak tetap pop-up; bila pop-up & notifikasi sama-sama dimatikan, pengingat tidak tampil. |
 
 ---
 
