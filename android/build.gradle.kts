@@ -14,6 +14,16 @@ rootProject.layout.buildDirectory.value(newBuildDir)
 subprojects {
     val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
     project.layout.buildDirectory.value(newSubprojectBuildDir)
+
+    // Injeksi dependensi concurrent-futures ke camera_android_camerax agar class
+    // CallbackToFutureAdapter ditemukan saat kompilasi Java di Gradle 9.x.
+    if (project.name == "camera_android_camerax") {
+        plugins.withId("com.android.library") {
+            dependencies {
+                add("implementation", "androidx.concurrent:concurrent-futures:1.2.0")
+            }
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")
