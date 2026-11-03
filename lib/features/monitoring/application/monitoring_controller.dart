@@ -14,6 +14,8 @@ import '../../../cv_engine/face_analyzer.dart';
 import '../../../cv_engine/fatigue_scorer.dart';
 import '../../../cv_engine/session_evaluator.dart';
 import '../../calibration/application/calibration_controller.dart';
+import '../../credits/application/credit_controller.dart';
+import '../../credits/domain/credit_models.dart';
 import '../../reminders/application/reminder_controller.dart';
 import '../../reminders/application/rule_engine.dart';
 import '../../reminders/application/timer_service.dart';
@@ -23,6 +25,17 @@ import '../data/metrics_repository.dart';
 import '../data/session_repository.dart';
 
 enum MonitoringMode { idle, ai, timer }
+
+/// Hasil [MonitoringController.startAi].
+enum StartAiOutcome {
+  started,
+  alreadyRunning,
+  notCalibrated,
+  /// 402: kuota gratis & kredit habis → UI menawarkan beli kredit / Mode Timer.
+  insufficientCredit,
+  /// Server tak terjangkau & hari belum aktif → sudah beralih ke Mode Timer.
+  offlineTimerMode,
+}
 
 class MonitoringState {
   final MonitoringMode mode;
@@ -47,11 +60,6 @@ class MonitoringState {
   /// Menit menatap layar tanpa periode jeda (T pada rumus skor).
   final double screenMinutes;
   final DateTime? sessionStart;
-
-  // Kredit (dummy sampai backend siap; SRS KRD-01)
-  final int freeQuotaRemaining;
-  final int creditBalance;
-  final bool dayActive;
 
   /// Sisa detik menuju pengingat 20-20-20 (TimerService; Mode AI & Timer).
   final int secondsToNext202020;
@@ -82,9 +90,6 @@ class MonitoringState {
     this.facePaused = false,
     this.screenMinutes = 0,
     this.sessionStart,
-    this.freeQuotaRemaining = 2,
-    this.creditBalance = 0,
-    this.dayActive = false,
     this.secondsToNext202020 = CvConstants.rule202020DefaultMin * 60,
     this.simulatingFatigue = false,
     this.simulatingTooClose = false,
@@ -110,9 +115,6 @@ class MonitoringState {
     bool? facePaused,
     double? screenMinutes,
     DateTime? sessionStart,
-    int? freeQuotaRemaining,
-    int? creditBalance,
-    bool? dayActive,
     int? secondsToNext202020,
     bool? simulatingFatigue,
     bool? simulatingTooClose,
@@ -135,9 +137,6 @@ class MonitoringState {
         facePaused: facePaused ?? this.facePaused,
         screenMinutes: screenMinutes ?? this.screenMinutes,
         sessionStart: sessionStart ?? this.sessionStart,
-        freeQuotaRemaining: freeQuotaRemaining ?? this.freeQuotaRemaining,
-        creditBalance: creditBalance ?? this.creditBalance,
-        dayActive: dayActive ?? this.dayActive,
         secondsToNext202020: secondsToNext202020 ?? this.secondsToNext202020,
         simulatingFatigue: simulatingFatigue ?? this.simulatingFatigue,
         simulatingTooClose: simulatingTooClose ?? this.simulatingTooClose,
@@ -145,11 +144,8 @@ class MonitoringState {
         message: message ?? this.message,
       );
 
-  /// Mengosongkan metrik saat pemantauan berhenti (status kredit dipertahankan).
+  /// Mengosongkan metrik saat pemantauan berhenti.
   MonitoringState stopped({String? message}) => MonitoringState(
-        freeQuotaRemaining: freeQuotaRemaining,
-        creditBalance: creditBalance,
-        dayActive: dayActive,
         secondsToNext202020: secondsToNext202020,
         fast202020: fast202020,
         message: message,
@@ -226,38 +222,45 @@ class MonitoringController extends Notifier<MonitoringState> {
         secondsToNext202020: _settings.interval202020Min * Duration.secondsPerMinute);
   }
 
-  /// UC-09 Memulai Pemantauan AI.
-  Future<void> startAi() async {
-    if (state.mode == MonitoringMode.ai || state.starting) return;
+  /// UC-09 Memulai Pemantauan AI. Hari Pemantauan AI diaktifkan lewat
+  /// CreditService (§8.2, Seq 4.21); jeda lalu mulai lagi di hari yang sama
+  /// tidak memotong kuota/kredit lagi (UC-10).
+  Future<StartAiOutcome> startAi() async {
+    if (state.mode == MonitoringMode.ai || state.starting) return StartAiOutcome.alreadyRunning;
     final calib = ref.read(calibrationControllerProvider);
     if (!calib.isComplete) {
       state = state.copyWith(message: 'Lakukan kalibrasi terlebih dahulu.');
-      return;
+      return StartAiOutcome.notCalibrated;
     }
 
-    // Aktivasi Hari Pemantauan (DFD 5.2): kuota gratis dulu, lalu kredit.
-    if (!state.dayActive) {
-      if (state.freeQuotaRemaining > 0) {
+    state = state.copyWith(starting: true);
+    final ActivationResult activation;
+    try {
+      activation = await ref.read(creditControllerProvider.notifier).activateToday();
+    } catch (e) {
+      // Offline & hari belum aktif → Mode Timer (alur alternatif §8.2).
+      state = state.copyWith(starting: false);
+      useTimerMode();
+      state = state.copyWith(
+          message: 'Tidak dapat mengaktifkan Hari Pemantauan AI (offline). Beralih ke Mode Timer.');
+      return StartAiOutcome.offlineTimerMode;
+    }
+    switch (activation) {
+      case ActivationInsufficient():
         state = state.copyWith(
-          dayActive: true,
-          freeQuotaRemaining: state.freeQuotaRemaining - 1,
-          message: 'Hari Pemantauan AI aktif (kuota gratis).',
-        );
-      } else if (state.creditBalance > 0) {
+            starting: false,
+            message: 'Kuota gratis & kredit habis. Beli kredit atau gunakan Mode Timer.');
+        return StartAiOutcome.insufficientCredit;
+      case ActivationSuccess(:final source, :final alreadyActive):
         state = state.copyWith(
-          dayActive: true,
-          creditBalance: state.creditBalance - 1,
-          message: 'Hari Pemantauan AI aktif (1 kredit terpakai).',
-        );
-      } else {
-        state = state.copyWith(message: 'Kuota & kredit habis. Beralih ke Mode Timer.');
-        useTimerMode();
-        return;
-      }
+            message: alreadyActive
+                ? 'Hari Pemantauan AI hari ini sudah aktif.'
+                : source == DaySource.free
+                    ? 'Hari Pemantauan AI aktif (kuota gratis).'
+                    : 'Hari Pemantauan AI aktif (1 kredit terpakai).');
     }
 
     await _stopEverything();
-    state = state.copyWith(starting: true);
     _blink = BlinkAnalyzer(baselineEar: calib.baselineEar!, tauFactor: _settings.sensitivity.tauFactor);
     _distance = DistanceEstimator(focalLengthPx: calib.focalLengthPx!);
     _evaluator = SessionEvaluator();
@@ -278,6 +281,7 @@ class MonitoringController extends Notifier<MonitoringState> {
     _startScreenTimer();
     _guard(_metrics.purgeOld);
     _sampleTimer = Timer.periodic(MetricsRepository.sampleInterval, (_) => saveSampleNow());
+    return StartAiOutcome.started;
   }
 
   /// UC-12 Mode Timer 20-20-20 tanpa kamera (gratis tanpa batas).
@@ -380,9 +384,6 @@ class MonitoringController extends Notifier<MonitoringState> {
     );
     if (shown) rules.markShown(top, m.t);
   }
-
-  /// Hanya untuk demo: menambah kredit tanpa pembayaran.
-  void addDemoCredit() => state = state.copyWith(creditBalance: state.creditBalance + 1);
 
   /// Faktor τ yang sedang dipakai BlinkAnalyzer (null bila Mode AI tidak berjalan).
   @visibleForTesting

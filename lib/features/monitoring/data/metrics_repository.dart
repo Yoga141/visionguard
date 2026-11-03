@@ -125,6 +125,49 @@ class MetricsRepository {
     return computed;
   }
 
+  /// Hari-hari (kunci `YYYY-MM-DD`, waktu lokal) sejak [from] yang memiliki
+  /// sesi pemantauan, termasuk sesi yang melewati tengah malam.
+  Future<Set<String>> activeDaysSince(DateTime from, {DateTime? now}) async {
+    final local = from.toLocal();
+    final start = DateTime(local.year, local.month, local.day);
+    final current = now ?? DateTime.now();
+    final iso = isoUtc(start);
+    final sessions = await (_db.select(_db.sessions)
+          ..where((s) => s.endedAt.isNull() | s.endedAt.isBiggerOrEqualValue(iso)))
+        .get();
+    final days = <String>{};
+    for (final s in sessions) {
+      final a = DateTime.parse(s.startedAt).toLocal();
+      final b = s.endedAt == null ? current : DateTime.parse(s.endedAt!).toLocal();
+      var d = DateTime(a.year, a.month, a.day);
+      if (d.isBefore(start)) d = start;
+      while (d.isBefore(b)) {
+        days.add(dayKey(d));
+        d = DateTime(d.year, d.month, d.day + 1);
+      }
+    }
+    return days;
+  }
+
+  /// Jumlah pengingat istirahat + 20-20-20 yang muncul pada hari [day]
+  /// (penyebut kepatuhan istirahat, STK-01).
+  Future<int> breakRemindersCount(DateTime day) {
+    final local = day.toLocal();
+    final from = isoUtc(DateTime(local.year, local.month, local.day));
+    final to = isoUtc(DateTime(local.year, local.month, local.day + 1));
+    final a = _db.alerts;
+    return _countAlerts(a.ts.isBiggerOrEqualValue(from) &
+        a.ts.isSmallerThanValue(to) &
+        a.type.isIn(AlertTypes.breaks));
+  }
+
+  /// Baris `daily_summaries` dengan kunci hari di [fromDay, toDay] (inklusif).
+  Future<List<DailySummary>> summariesBetween(String fromDay, String toDay) =>
+      (_db.select(_db.dailySummaries)
+            ..where((d) => d.day.isBiggerOrEqualValue(fromDay) & d.day.isSmallerOrEqualValue(toDay))
+            ..orderBy([(d) => OrderingTerm.asc(d.day)]))
+          .get();
+
   /// Ringkasan yang belum terkirim ke server (untuk SyncService nanti).
   Future<List<DailySummary>> pendingSync() =>
       (_db.select(_db.dailySummaries)..where((d) => d.synced.equals(false))).get();

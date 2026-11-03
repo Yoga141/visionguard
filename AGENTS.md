@@ -23,6 +23,7 @@ VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi
 - **Saran AI (fitur tambahan, DOCS_SPEC §17):** `google_generative_ai` + `flutter_dotenv` (`GEMINI_API_KEY` di `.env`). Pemanggilan langsung dari klien **khusus pengembangan**; versi final wajib lewat backend `POST /ai/advice`.
 - **Database lokal:** SQLite via `drift` + `drift_flutter` (file di folder `getApplicationSupportDirectory` dari `path_provider`), skema persis DOCS_SPEC §12.3. Kode `app_database.g.dart` dihasilkan `drift_dev` + `build_runner`.
 - **Notifikasi pengingat:** `flutter_local_notifications` 22.x (Windows & Android, aksi Tunda). Gagal/tidak didukung/izin ditolak → pop-up dalam aplikasi. Android memakai *core library desugaring* & izin `POST_NOTIFICATIONS`.
+- **Grafik:** `fl_chart` 1.x (tren 7/30 hari di halaman Statistik).
 - Direncanakan (masih dikomentari di `pubspec.yaml`): `tflite_flutter`
 - **Firebase tidak dipakai** (DOCS_SPEC §16 #13). Jangan menambahkannya kembali tanpa izin.
 
@@ -37,6 +38,8 @@ lib/
 │   ├── constants/        # cv_constants.dart — satu-satunya tempat konstanta CV & ambang pengingat
 │   │                     # (termasuk cooldown, durasi kondisi, tunda/Mode Fokus, opsi demo)
 │   │                     # api_constants.dart — base URL, flag useRemoteApi, timeout
+│   │                     # business_constants.dart — aturan kredit (kuota 2/bulan) & statistik
+│   │                     # (rentang tren 7/30, minimal 2 hari, data contoh 14 hari)
 │   ├── database/         # app_database.dart (6 tabel §12.3) + app_database.g.dart (generated),
 │   │                     # database_providers.dart (appDatabaseProvider, dayKey)
 │   └── network/          # api_client.dart (Dio + interceptor token), api_exception.dart,
@@ -49,14 +52,19 @@ lib/
 │   ├── ai_assistant/     # Saran AI (§17): data/ai_advice_repository.dart (kontrak + saran statis),
 │   │                     # data/gemini_service.dart (DirectGeminiAdviceRepository, dev),
 │   │                     # data/api_ai_advice_repository.dart (POST /ai/advice, belum aktif),
-│   │                     # application/ai_advice_provider.dart
+│   │                     # application/ai_advice_provider.dart,
+│   │                     # presentation/ai_advice_card.dart (kartu "Minta saran", Dashboard & Statistik)
 │   ├── auth/             # auth_repository (kontrak + Fake), api_auth_repository,
 │   │                     # auth_controller, login_page
 │   ├── calibration/      # data/calibration_repository (per camera_id, KLB-04),
 │   │                     # calibration_controller, calibration_page
-│   ├── credits/          # presentation/credits_page (S-09, placeholder)
+│   ├── credits/          # domain/credit_models.dart (paket, order, ledger, monitoring day, status,
+│   │                     # ActivationResult); data/credit_repository.dart (kontrak +
+│   │                     # FakeCreditRepository: algoritma §8.2, saldo = SUM ledger);
+│   │                     # application/credit_controller.dart; presentation/credits_page (S-09)
 │   ├── monitoring/       # data/session_repository, metrics_repository (sampel 60 dtk,
-│   │                     # retensi 30 hari, ringkasan harian), alert_repository;
+│   │                     # retensi 30 hari, ringkasan harian, hari aktif, pengingat istirahat),
+│   │                     # alert_repository;
 │   │                     # monitoring_controller, dashboard_page
 │   ├── onboarding/       # privacy_onboarding_page
 │   ├── reminders/        # Pengingat PNG-01..07: domain/reminder.dart (ReminderType berurutan
@@ -71,16 +79,23 @@ lib/
 │   ├── settings/         # data/settings_repository (key-value),
 │   │                     # application/settings_controller (AppSettings, Sensitivity → τ),
 │   │                     # presentation/settings_page (S-10, akun & logout)
-│   └── stats/            # presentation/statistics_page (S-08, placeholder)
+│   └── stats/            # data/stats_repository.dart (kontrak + FakeStatsRepository, sinkron tiruan),
+│                         # data/demo_data_seeder.dart (debug: data contoh 14 hari);
+│                         # application/stats_controller.dart (agregasi → sinkron → tren);
+│                         # presentation/statistics_page (S-08: tab Hari Ini & Tren, fl_chart)
 └── shared/
     └── widgets/          # camera_active_badge.dart, coming_soon.dart
 ```
 
-Test ada di `test/` (`cv_engine_test.dart`, `network_test.dart`, `ai_advice_test.dart`, `database_test.dart`, `local_storage_flow_test.dart`, `settings_test.dart`, `reminders_test.dart`, `widget_test.dart`). Test pengingat memakai `FakeNotifier` (override `systemNotifierProvider`) dan jam tiruan (override `reminderClockProvider`). Test database memakai SQLite in-memory (`AppDatabase(NativeDatabase.memory())`, override `appDatabaseProvider`).
+Test ada di `test/` (`cv_engine_test.dart`, `network_test.dart`, `ai_advice_test.dart`, `ai_advice_card_test.dart`, `database_test.dart`, `local_storage_flow_test.dart`, `settings_test.dart`, `reminders_test.dart`, `stats_test.dart`, `credits_test.dart`, `widget_test.dart`). Test kredit meng-override `creditRepositoryProvider` (`FakeCreditRepository` dengan jam tiruan); test statistik meng-override `statsRepositoryProvider` dan `statsClockProvider`. Test pengingat memakai `FakeNotifier` (override `systemNotifierProvider`) dan jam tiruan (override `reminderClockProvider`). Test database memakai SQLite in-memory (`AppDatabase(NativeDatabase.memory())`, override `appDatabaseProvider`).
 
 **Alur pengingat:** `MonitoringController` memanggil `RuleEngine.evaluate` tiap evaluasi 10 detik `SessionEvaluator` (Mode AI) atau tiap detak `TimerService` saat 20-20-20 jatuh tempo (Mode Timer) → `ReminderController.show` (hanya satu sekaligus; ditolak saat Tunda/Mode Fokus, dan cooldown baru dimulai bila benar-benar tampil). Pop-up dipasang di `MaterialApp.builder` (`ReminderOverlay`). Opsi demo (simulasi mata lelah, simulasi terlalu dekat, percepat 20-20-20 ke 1 menit) hanya tampil dengan `DummyFaceAnalyzer`.
 
-**Beralih ke backend asli:** selama `ApiConstants.useRemoteApi == false`, auth memakai `FakeAuthRepository` dan Saran AI memakai `DirectGeminiAdviceRepository`. Saat backend siap, jalankan dengan `--dart-define=USE_REMOTE_API=true --dart-define=API_BASE_URL=https://.../api` (beralih ke `ApiAuthRepository` dan `ApiAiAdviceRepository`).
+**Alur kredit:** `MonitoringController.startAi` → `CreditController.activateToday` → `CreditRepository.activateToday` (§8.2: hari sudah aktif → tidak memotong; kuota gratis bulan berjalan; kredit −1 di ledger; habis → `ActivationInsufficient`, Dashboard menawarkan beli kredit atau Mode Timer; error/offline → Mode Timer). Jangan menaruh logika kuota/saldo di controller UI; saldo selalu dari ledger server (§15.5).
+
+**Alur statistik:** `StatsController` (dimuat saat halaman Statistik dibuka & saat pemantauan berhenti) → `MetricsRepository.dailySummary` untuk hari yang punya sesi (tidak membuat baris kosong) → kirim `pendingSync()` ke `StatsRepository` lalu `markSynced` → tren 30 hari dari server, atau dari `daily_summaries` lokal bila offline. Tombol "Isi data contoh 14 hari" hanya tampil di `kDebugMode`.
+
+**Beralih ke backend asli:** selama `ApiConstants.useRemoteApi == false`, auth memakai `FakeAuthRepository` dan Saran AI memakai `DirectGeminiAdviceRepository`. Kredit (`FakeCreditRepository`) dan statistik server (`FakeStatsRepository`) masih selalu tiruan; implementasi API-nya dibuat saat backend siap. Saat backend siap, jalankan dengan `--dart-define=USE_REMOTE_API=true --dart-define=API_BASE_URL=https://.../api` (beralih ke `ApiAuthRepository` dan `ApiAiAdviceRepository`).
 
 ## 5. Perintah penting
 

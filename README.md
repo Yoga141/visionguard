@@ -4,48 +4,60 @@ Aplikasi Flutter berbasis *computer vision* untuk deteksi dini dan pencegahan ke
 
 Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard v1.0.
 
-## Status: menuju Progress 50% (bagian 2 dari 3 selesai)
+## Status: Progress 50%
 
-| Fitur | Status | Acuan |
-|---|---|---|
-| Arsitektur folder berbasis Riverpod (feature-first) | ✅ | SDD 3.2 |
-| Login & Registrasi (repository tiruan; klien REST Laravel siap) | ✅ | S-01, UC-01, UC-02 |
-| Onboarding Privasi + penafian medis | ✅ | S-02, UC-06, KLB-01 |
-| Kalibrasi mata (baseline EAR, median 10 dtk) | ✅ | S-03, UC-07, KLB-02 |
-| Kalibrasi jarak (focal length) + opsi lewati | ✅ | S-03, UC-08, KLB-03 |
-| Kalibrasi tersimpan per kamera & minta ulang saat kamera diganti | ✅ | KLB-04 |
-| Dashboard: BR, PERCLOS, jarak, skor, status kredit | ✅ | S-04, PMT-02..04 |
-| Menu utama: Dashboard, Statistik, Kredit, Pengaturan (bottom nav / navigation rail) | ✅ | §7.4 |
-| CameraSource (kamera asli / fallback simulasi) | ✅ | SDD 4.1 |
-| Rumus EAR, blink rate, PERCLOS | ✅ | SDD 2.5.1 |
-| Estimasi jarak dari diameter iris, dihaluskan median 1 detik | ✅ | SDD 2.5.2, §16 #6 |
-| Skor kelelahan 50:30:20 (int, dievaluasi tiap 10 detik) + level 40/60 | ✅ | SDD 2.5.3, §16 #7 |
-| Jeda perhitungan saat wajah tidak terdeteksi > 10 detik | ✅ | PMT-05 |
-| Mode Timer 20-20-20 (TimerService, interval dari Pengaturan) | ✅ | UC-12 |
-| RuleEngine: Istirahat > Jarak > Kedip > 20-20-20, durasi kondisi, cooldown 20/5/10 mnt, satu pengingat sekaligus | ✅ | §9.5, PNG-01..03, PNG-07 |
-| TimerService: waktu layar kontinu (Mode AI & Timer, dijeda saat wajah hilang) | ✅ | Seq 4.23 |
-| Pop-up pengingat kanan bawah: Oke/Tunda, tanpa ambil fokus, hilang 15 dtk → `dismissed` | ✅ | S-05, USB-02, UC-13 |
-| Notifikasi sistem (Windows & Android) + aksi Tunda; cadangan pop-up | ✅ | S-06, §4.2 |
-| Istirahat 20-20-20: hitung mundur 20 dtk + verifikasi kamera (≥ 15 dtk berpaling) | ✅ | PNG-04, PNG-05, UC-14 |
-| Tunda 15/30/60 mnt & Mode Fokus 30/60/90/120 mnt (dari Dashboard, bisa diakhiri) | ✅ | PNG-06, UC-15 |
-| Pencatatan respons pengingat ke tabel `alerts` | ✅ | D5, UC-13 |
-| Opsi demo: simulasi mata lelah, simulasi terlalu dekat, percepat 20-20-20 (1 mnt) | ✅ (hanya analyzer simulasi) | — |
-| Pengaturan: sensitivitas (τ 0,65/0,70/0,75), jenis pengingat, interval 10–60 mnt, reset bawaan | ✅ | S-10, PGT-01, UC-21 |
-| Akun di Pengaturan: info, Logout, Hapus Akun (konfirmasi; permanen setelah backend) | ✅ / ⏳ | AKN-02, AKN-04 |
-| Autostart | ⏳ tampil "segera hadir" | PGT-02 |
-| Database lokal SQLite (drift): kalibrasi, sesi, metrik per menit, pengingat, ringkasan, pengaturan | ✅ | §12.3, KDL-01 |
-| Saran AI (Gemini, khusus pengembangan) | ✅ (repository, belum di UI) | §17 |
-| Unit & widget test (CV, database, pengaturan, jaringan, pengingat) | ✅ | PML-01 |
-| Halaman Statistik & Kredit | ⏳ placeholder | S-08, S-09 |
-| Deteksi wajah MediaPipe asli | ⏳ masih `DummyFaceAnalyzer` | SDD 4.1 |
-| System tray (jeda/lanjut, Mode Fokus dari tray), backend Laravel, Midtrans | ⏳ | S-11 |
+Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel + Midtrans belum ada, sehingga
+fitur yang butuh server memakai repository **tiruan** (fake) di aplikasi.
+
+| ID | Kebutuhan (DOCS_SPEC §5) | Status | Catatan |
+|---|---|---|---|
+| AKN-01 | Daftar dengan nama, email, kata sandi | 🟡 sebagian | Form & validasi selesai; `FakeAuthRepository`, klien REST `ApiAuthRepository` siap |
+| AKN-02 | Login & logout | 🟡 sebagian | Pengguna: selesai (repository tiruan); admin (Filament) di luar repo ini |
+| AKN-03 | Reset kata sandi via email | ⏳ belum | Tombol "Lupa kata sandi?" menampilkan info "setelah backend siap" |
+| AKN-04 | Hapus akun | 🟡 sebagian | Konfirmasi di Pengaturan; penghapusan permanen setelah backend |
+| KLB-01 | Penjelasan privasi & izin kamera | ✅ selesai | S-02, penafian medis |
+| KLB-02 | Kalibrasi mata 10 detik (baseline EAR) | ✅ selesai | Median 10 dtk |
+| KLB-03 | Focal length pada jarak acuan | ✅ selesai | + opsi lewati (FOV 60°) |
+| KLB-04 | Kalibrasi ulang & per kamera | ✅ selesai | `calibrations.camera_id` |
+| PMT-01 | Aktivasi Hari Pemantauan AI (kuota gratis / 1 kredit) | 🟡 sebagian | Algoritma §8.2 di `FakeCreditRepository`; endpoint server belum |
+| PMT-02 | Deteksi kedipan & BR real-time | 🟡 sebagian | Rumus & pipeline selesai; landmark masih `DummyFaceAnalyzer` (MediaPipe belum) |
+| PMT-03 | Estimasi jarak real-time | 🟡 sebagian | Median iris 1 dtk selesai; landmark masih simulasi |
+| PMT-04 | PERCLOS & skor tiap 10 detik | 🟡 sebagian | Selesai di CV Engine; menunggu MediaPipe |
+| PMT-05 | Jeda saat wajah hilang > 10 detik | ✅ selesai | `SessionEvaluator` |
+| PMT-06 | Latar belakang (tray / foreground service) | ⏳ belum | |
+| PMT-07 | Sesi Cek Mata 2 menit (mobile) | ⏳ belum | |
+| PMT-08 | Beralih ke Mode Timer | 🟡 sebagian | Saat offline & hari belum aktif / pilihan saat kredit habis; deteksi kamera dipakai app lain belum |
+| PNG-01 | Pengingat kedip | ✅ selesai | BR < 10 selama 3 mnt, cooldown 10 mnt |
+| PNG-02 | Pengingat jarak | ✅ selesai | < 50/30 cm selama 10 dtk, cooldown 5 mnt |
+| PNG-03 | Pengingat istirahat | ✅ selesai | Skor ≥ 60, cooldown 20 mnt |
+| PNG-04 | 20-20-20 + hitung mundur 20 dtk | ✅ selesai | Mode AI & Mode Timer |
+| PNG-05 | Verifikasi berpaling saat istirahat | ✅ selesai | ≥ 15 dari 20 dtk |
+| PNG-06 | Tunda 15/30/60 & Mode Fokus | ✅ selesai | Mode Fokus dari Dashboard (tray belum) |
+| PNG-07 | Cooldown per jenis | ✅ selesai | |
+| STK-01 | Ringkasan harian | ✅ selesai | S-08 tab "Hari Ini": durasi, rata-rata BR/jarak/skor, pengingat, kepatuhan istirahat |
+| STK-02 | Grafik tren 7 & 30 hari | ✅ selesai | `fl_chart`; "data belum cukup" bila < 2 hari |
+| STK-03 | Sinkron ringkasan ke server | 🟡 sebagian | `daily_summaries.synced` + `FakeStatsRepository`; `POST /stats/daily` belum |
+| KRD-01 | Kuota gratis, saldo, status hari ini | 🟡 sebagian | S-09 & Dashboard selesai; data dari `FakeCreditRepository` |
+| KRD-02 | Beli paket via Midtrans | ⏳ belum | Daftar paket + tombol Beli → dialog "setelah backend siap" |
+| KRD-03 | Kredit bertambah setelah pembayaran | ⏳ belum | Butuh notifikasi Midtrans di server |
+| KRD-04 | Riwayat transaksi & pemakaian | 🟡 sebagian | UI selesai; data tiruan |
+| PGT-01 | Sensitivitas, jenis pengingat, interval | ✅ selesai | τ 0,65/0,70/0,75; interval 10–60 mnt |
+| PGT-02 | Autostart | ⏳ belum | Tampil "segera hadir" |
+
+Fitur tambahan: **Saran AI** (§17) — kartu "Minta saran" di Dashboard (saat Mode AI) dan
+Statistik; hanya angka ringkasan yang dikirim, saran statis bila key kosong/gagal. Panggilan
+Gemini langsung **khusus pengembangan**.
+
+Opsi debug (hanya `kDebugMode` / analyzer simulasi): "Isi data contoh 14 hari" di Statistik,
+"Tambah 1 kredit" di Kredit, simulasi mata lelah/terlalu dekat, percepat 20-20-20.
 
 ## Menjalankan
 
 ```bash
 flutter pub get
 flutter run            # pilih device: android / windows / chrome / dll
-flutter test           # unit test rumus SDD 2.5
+flutter analyze        # analisis statis
+flutter test           # unit & widget test
 ```
 
 Akun demo: `demo@visionguard.id` / `password123`
@@ -69,13 +81,21 @@ lib/
 │   ├── auth/         (data, application, presentation)
 │   ├── onboarding/   (presentation)
 │   ├── calibration/  (application, presentation)
-│   ├── monitoring/   (application, presentation)
-│   └── reminders/    (domain, application, data, presentation) — RuleEngine, TimerService, pop-up
+│   ├── ai_assistant/ (data, application, presentation) — Saran AI (§17)
+│   ├── calibration/  (data, application, presentation)
+│   ├── credits/      (domain, data, application, presentation) — CreditRepository tiruan, S-09
+│   ├── monitoring/   (data, application, presentation)
+│   ├── reminders/    (domain, application, data, presentation) — RuleEngine, TimerService, pop-up
+│   ├── settings/     (data, application, presentation)
+│   └── stats/        (data, application, presentation) — agregasi, sinkron tiruan, grafik S-08
 └── shared/widgets/                   # widget bersama (badge kamera aktif)
 test/
 ├── cv_engine_test.dart               # uji rumus EAR, jarak, skor
 ├── reminders_test.dart               # RuleEngine, TimerService, tunda/fokus, verifikasi istirahat
-└── widget_test.dart
+├── stats_test.dart                   # agregasi daily_summaries, sinkron/offline, halaman Statistik
+├── credits_test.dart                 # aktivasi hari §8.2, ledger, halaman Kredit
+├── ai_advice_card_test.dart          # kartu Saran AI
+└── ...                               # database, pengaturan, jaringan, widget
 ```
 
 ## Catatan Privasi

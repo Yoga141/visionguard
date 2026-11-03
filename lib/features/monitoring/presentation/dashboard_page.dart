@@ -7,8 +7,12 @@ import '../../../app/theme.dart';
 import '../../../core/constants/cv_constants.dart';
 import '../../../cv_engine/fatigue_scorer.dart';
 import '../../../shared/widgets/camera_active_badge.dart';
+import '../../ai_assistant/data/ai_advice_repository.dart';
+import '../../ai_assistant/presentation/ai_advice_card.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../calibration/application/calibration_controller.dart';
+import '../../credits/application/credit_controller.dart';
+import '../../credits/domain/credit_models.dart';
 import '../../reminders/application/reminder_controller.dart';
 import '../application/monitoring_controller.dart';
 
@@ -84,7 +88,14 @@ class DashboardPage extends ConsumerWidget {
                   Text(m.message!, textAlign: TextAlign.center),
                 ],
                 const SizedBox(height: 16),
-                _CreditCard(state: m, onAddDemoCredit: ctrl.addDemoCredit),
+                const _CreditCard(),
+                if (m.mode == MonitoringMode.ai) ...[
+                  const SizedBox(height: 12),
+                  AiAdviceCard(
+                    metrics: _adviceMetrics(m),
+                    emptyHint: 'Tunggu skor kelelahan pertama (±10 detik).',
+                  ),
+                ],
                 // Opsi demo hanya saat memakai DummyFaceAnalyzer.
                 if (m.mode != MonitoringMode.idle && ctrl.canSimulateFatigue) ...[
                   const SizedBox(height: 8),
@@ -106,6 +117,17 @@ class DashboardPage extends ConsumerWidget {
       ),
     );
   }
+
+  /// §17.2: hanya angka ringkasan dari state pemantauan terakhir.
+  static AdviceMetrics? _adviceMetrics(MonitoringState m) => m.fatigueScore == null
+      ? null
+      : AdviceMetrics(
+          fatigueScore: m.fatigueScore!,
+          blinkRate: m.blinkRate,
+          perclos: m.perclos,
+          distanceCm: m.distanceCm,
+          screenMinutes: m.screenMinutes.round(),
+        );
 
   String _modeLabel(MonitoringState m) => switch (m.mode) {
         MonitoringMode.idle => 'Pemantauan belum berjalan.',
@@ -326,6 +348,34 @@ class _StartStopButton extends StatelessWidget {
   final bool calibrated;
   final MonitoringController ctrl;
 
+  /// UC-09: kuota & kredit habis → tawarkan beli kredit atau Mode Timer.
+  Future<void> _start(BuildContext context) async {
+    final outcome = await ctrl.startAi();
+    if (outcome != StartAiOutcome.insufficientCredit || !context.mounted) return;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Kredit tidak cukup'),
+        content: const Text('Kuota gratis bulan ini dan saldo kredit sudah habis. '
+            'Beli paket kredit untuk memakai Pemantauan AI, atau gunakan Mode Timer '
+            '20-20-20 yang gratis tanpa batas.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, 'timer'), child: const Text('Mode Timer')),
+          FilledButton(
+            style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+            onPressed: () => Navigator.pop(context, 'buy'),
+            child: const Text('Beli kredit'),
+          ),
+        ],
+      ),
+    );
+    if (!context.mounted) return;
+    if (choice == 'timer') ctrl.useTimerMode();
+    if (choice == 'buy') context.go(Routes.credits);
+  }
+
   @override
   Widget build(BuildContext context) {
     if (state.starting) {
@@ -343,7 +393,7 @@ class _StartStopButton extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         FilledButton.icon(
-          onPressed: calibrated ? ctrl.startAi : () => context.go(Routes.calibration),
+          onPressed: calibrated ? () => _start(context) : () => context.go(Routes.calibration),
           icon: Icon(calibrated ? Icons.play_arrow : Icons.tune),
           label: Text(calibrated ? 'Mulai Pemantauan AI' : 'Kalibrasi dulu'),
         ),
@@ -358,23 +408,26 @@ class _StartStopButton extends StatelessWidget {
   }
 }
 
-class _CreditCard extends StatelessWidget {
-  const _CreditCard({required this.state, required this.onAddDemoCredit});
-  final MonitoringState state;
-  final VoidCallback onAddDemoCredit;
+/// Status kuota & kredit (S-04); detail di halaman Kredit (S-09).
+class _CreditCard extends ConsumerWidget {
+  const _CreditCard();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final status = ref.watch(creditControllerProvider).status;
     return Card(
       child: ListTile(
         leading: const Icon(Icons.account_balance_wallet_outlined),
-        title: Text('Kuota gratis: ${state.freeQuotaRemaining} hari • Kredit: ${state.creditBalance}'),
-        subtitle: Text(state.dayActive ? 'Hari Pemantauan AI hari ini: AKTIF' : 'Hari Pemantauan AI hari ini: belum aktif'),
-        trailing: IconButton(
-          tooltip: 'Tambah 1 kredit (demo)',
-          icon: const Icon(Icons.add_circle_outline),
-          onPressed: onAddDemoCredit,
-        ),
+        title: Text(status == null
+            ? 'Memuat status kredit...'
+            : 'Kuota gratis: ${status.freeQuotaRemaining} hari • Kredit: ${status.balance}'),
+        subtitle: Text(switch (status) {
+          null => '',
+          CreditStatus(todayActive: true) => 'Hari Pemantauan AI hari ini: AKTIF',
+          _ => 'Hari Pemantauan AI hari ini: belum aktif',
+        }),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.go(Routes.credits),
       ),
     );
   }
