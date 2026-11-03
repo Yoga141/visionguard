@@ -7,6 +7,7 @@ Instruksi tunggal untuk semua AI coding assistant (Claude Code, OpenCode, Antigr
 - **Baca `DOCS_SPEC.md` sebelum mengerjakan apa pun.** Dokumen itu adalah sumber kebenaran fitur, alur, database, API, dan aturan bisnis (diringkas dari SRS & SDD VisionGuard v1.0).
 - Jika kode bertentangan dengan `DOCS_SPEC.md`, **ikuti `DOCS_SPEC.md`**.
 - Jika suatu hal **belum diatur** di `DOCS_SPEC.md` atau termasuk **§16 (Inkonsistensi & Keputusan Terbuka)**, **tanyakan dulu** ke pengguna sebelum memutuskan.
+- **Baca `ROADMAP.md`** untuk status progress, urutan tahap berikutnya (A–F), kriteria selesai, dan cara verifikasinya. Kerjakan satu tahap per sesi, lalu centang tahap yang selesai dan isi "Catatan sesi" di `ROADMAP.md`.
 
 ## 2. Ringkasan proyek
 
