@@ -3,16 +3,20 @@
 Panduan kerja untuk AI agent berikutnya (Claude Code, Antigravity, OpenCode, dll.).
 Dokumen ini **tidak** menggantikan `DOCS_SPEC.md`. Jika ada yang bertentangan, `DOCS_SPEC.md` yang berlaku.
 
-Terakhir diperbarui: 2 November 2026 · Basis: commit `3ba90c3` (progress 50%).
+Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` (progress 50%; `lib/` dan `test/` tidak berubah sejak `3ba90c3`).
 
 **Ringkasan tahap**
 
-- [ ] **Tahap A**: Backend Laravel inti (`./backend`)
-- [ ] **Tahap B**: Midtrans Sandbox, panel admin Filament, reset kata sandi via email
-- [ ] **Tahap C**: Integrasi Flutter ke backend
-- [ ] **Tahap D**: Deteksi wajah asli MediaPipe
-- [ ] **Tahap E**: Latar belakang, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ
-- [ ] **Tahap F**: Finalisasi dan serah terima
+| Tahap | Isi | Status |
+|---|---|---|
+| [ ] **A** | Backend Laravel inti (`./backend`, MySQL, Sanctum, endpoint §11, `POST /ai/advice`) | ⏳ belum — folder `backend/` belum ada |
+| [ ] **B** | Midtrans Sandbox, panel admin Filament, reset kata sandi via email | ⏳ belum |
+| [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — fondasi klien ada (`ApiClient`, `TokenStorage`, `ApiAuthRepository`, `ApiAiAdviceRepository`, flag `useRemoteApi`); repository API kredit/statistik, auto-login, lupa sandi, hapus akun belum |
+| [ ] **D** | Deteksi wajah asli (MediaPipe) | ⏳ belum — antarmuka `FaceAnalyzer` + `DummyFaceAnalyzer` siap; `tflite_flutter` masih dikomentari |
+| [ ] **E** | Latar belakang/system tray, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ | ⏳ belum |
+| [ ] **F** | Finalisasi + `HANDOFF.md` | ⏳ belum |
+
+Status: ⏳ belum · 🟡 sebagian · ✅ selesai. Perbarui kolom ini (dan `Status:` di tiap tahap) setiap akhir tahap.
 
 Urutan wajib A → B → C. Tahap D dan E tidak bergantung pada backend, jadi boleh dikerjakan lebih dulu **jika pengguna memintanya**. Tahap F selalu terakhir.
 
@@ -35,7 +39,10 @@ Urutan wajib A → B → C. Tahap D dan E tidak bergantung pada backend, jadi bo
 
 ## 1. Status saat ini (progress 50%)
 
-Diverifikasi terhadap kode di `lib/` dan `test/`. Folder `backend/` **belum ada**. Semua fitur yang butuh server memakai repository tiruan (`Fake*Repository`).
+Diverifikasi ulang 16 Nov 2026 terhadap kode di `lib/` dan `test/` (commit `aca273a`). Folder `backend/` **belum ada**. Semua fitur yang butuh server memakai repository tiruan (`Fake*Repository`).
+`flutter analyze`: 0 issue · `flutter test`: 127 test lulus.
+
+Perubahan sejak `3ba90c3` (di luar `lib/`): `android/build.gradle.kts` menyuntik `androidx.concurrent:concurrent-futures:1.2.0` ke `camera_android_camerax` agar build APK berhasil di Gradle 9.x. Commit `aca273a` juga ikut memasukkan `android/build/reports/problems/problems-report.html` (hasil build); sebaiknya dikeluarkan dari Git dan ditambahkan ke `.gitignore` oleh pengguna.
 Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum.
 
 ### AKN — Akun
@@ -116,6 +123,8 @@ ADM-01, ADM-02, ADM-03 belum ada. Akan dibangun dengan Filament di Tahap B.
 
 ### Tahap A — Backend Laravel inti
 
+**Status:** ⏳ belum. `backend/` belum ada; `API_CONTRACT.md` belum ada.
+
 **Tujuan:** REST API Laravel + Sanctum + MySQL di `./backend` yang memenuhi kontrak §11 dan skema §12.2, belum termasuk pembayaran.
 
 **ID kebutuhan:** AKN-01, AKN-02 (sisi server), AKN-04, PMT-01, STK-03, KRD-01, KRD-04, KMN-02, KMN-03, PRV-02, Saran AI §17.4.
@@ -168,6 +177,8 @@ Klien Flutter tidak diubah di tahap ini, jadi `flutter analyze` dan `flutter tes
 
 ### Tahap B — Midtrans Sandbox, panel admin Filament, reset kata sandi
 
+**Status:** ⏳ belum. Bergantung pada Tahap A.
+
 **Tujuan:** pembelian kredit end-to-end di sisi server, panel admin, dan reset sandi lewat email.
 
 **ID kebutuhan:** KRD-02, KRD-03 (server), AKN-02 (admin), AKN-03 (server), ADM-01, ADM-02, ADM-03, KMN-03.
@@ -210,6 +221,8 @@ Buka `http://127.0.0.1:8000/admin`, login sebagai admin, coba A-01..A-03.
 
 ### Tahap C — Integrasi Flutter ke backend
 
+**Status:** 🟡 sebagian (fondasi saja). Sudah ada: `ApiClient` (Dio + interceptor token), `ApiException`, `TokenStorage`, `ApiAuthRepository` (register/login/logout), `ApiAiAdviceRepository`, flag `ApiConstants.useRemoteApi`, test `network_test.dart`. Belum: `restoreSession`, `forgotPassword`, `deleteAccount` di kontrak auth; `api_credit_repository.dart`; `api_stats_repository.dart`; alur beli Midtrans. Tidak bisa diuji end-to-end sebelum Tahap A–B.
+
 **Tujuan:** aplikasi memakai backend asli bila `USE_REMOTE_API=true`; repository tiruan tetap dipakai untuk test dan mode tanpa server.
 
 **ID kebutuhan:** AKN-01..04, PMT-01, PMT-08 (offline), STK-03, KRD-01..04, Saran AI §17.3 (versi final), KMN-01, PRV-02.
@@ -247,6 +260,8 @@ Catatan: build pengembangan ke `http://` lokal butuh izin cleartext Android (`ne
 
 ### Tahap D — Deteksi wajah asli (MediaPipe)
 
+**Status:** ⏳ belum. Antarmuka `FaceAnalyzer` dan `DummyFaceAnalyzer` siap; `MediaPipeFaceAnalyzer` belum ada; `tflite_flutter` masih dikomentari di `pubspec.yaml`. Build APK Android sudah bisa (perbaikan Gradle di `aca273a`).
+
 **Tujuan:** mengganti `DummyFaceAnalyzer` dengan `MediaPipeFaceAnalyzer` yang menghasilkan 478 landmark + yaw dari frame kamera, tanpa mengubah `BlinkAnalyzer`, `DistanceEstimator`, `FatigueScorer`, dan `SessionEvaluator`.
 
 **ID kebutuhan:** PMT-02, PMT-03, PMT-04, KLB-02, KLB-03 (dengan data asli), PNG-05 (yaw asli), KNR-01, AKR-01, AKR-02, PRV-01.
@@ -280,6 +295,8 @@ Catat fps, hasil uji jarak, dan jumlah kedipan terdeteksi vs dihitung manual (1 
 
 ### Tahap E — Latar belakang, Sesi Cek Mata, autostart, kamera bentrok, bantuan
 
+**Status:** ⏳ belum. Tidak ada tray, foreground service, `features/eye_check/`, `features/help/`, maupun retry kamera. Mode Fokus sementara dari Dashboard; autostart tampil "segera hadir".
+
 **Tujuan:** melengkapi perilaku platform dan dokumentasi pengguna di dalam aplikasi.
 
 **ID kebutuhan:** PMT-06, PMT-07, PMT-08 (kamera dipakai aplikasi lain), PGT-02, PNG-06 (Mode Fokus dari tray), S-07, S-11, KDL-02, KNR-02, §7.5 (bantuan & FAQ).
@@ -312,6 +329,8 @@ Ukur CPU/RAM Windows saat di tray (Task Manager, target ≤ 15% / ≤ 300 MB, KN
 ---
 
 ### Tahap F — Finalisasi
+
+**Status:** ⏳ belum. `HANDOFF.md` belum ada; coverage belum pernah diukur. Selalu terakhir.
 
 **Tujuan:** memastikan semua kebutuhan terpenuhi, kode rapi, dokumen mutakhir, dan siap diserahkan.
 
@@ -369,3 +388,5 @@ Isi satu baris setiap akhir sesi (terbaru di bawah).
 | Tanggal | Tahap | Ringkasan | Keputusan baru / pertanyaan terbuka |
 |---|---|---|---|
 | 2026-11-02 | — | ROADMAP.md dibuat dari audit kode commit `3ba90c3` | — |
+| 2026-11-11 | — | Audit ulang di `aca273a`: `lib/`/`test/` tidak berubah, `backend/` belum ada; kolom status per tahap ditambahkan; AGENTS.md diberi aturan perbarui status tiap akhir tahap | `problems-report.html` hasil build ikut ter-commit — sebaiknya di-untrack oleh pengguna |
+| 2026-11-16 | — | Audit ulang di `aca273a`: `lib/`/`test/` tetap tidak berubah, `backend/`, `API_CONTRACT.md`, `HANDOFF.md` belum ada; `flutter analyze` 0 issue, `flutter test` 127 lulus; status tahap A–F tidak berubah | — |
