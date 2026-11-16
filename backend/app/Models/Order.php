@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\Payments\PaymentNotificationService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasOne;
@@ -47,14 +48,14 @@ class Order extends Model
 
     /**
      * Tandai order lunas (§8.4 langkah 4). Penambahan kredit ke ledger dilakukan
-     * oleh pemroses notifikasi Midtrans (Tahap B) dalam transaksi yang sama.
+     * oleh {@see PaymentNotificationService} dalam transaksi yang sama.
      */
-    public function markSettled(?string $paymentType = null): void
+    public function markSettled(?string $paymentType = null, ?\DateTimeInterface $paidAt = null): void
     {
         $this->forceFill([
             'status' => self::STATUS_SETTLEMENT,
             'payment_type' => $paymentType,
-            'paid_at' => now(),
+            'paid_at' => $paidAt ?? now(),
         ])->save();
     }
 }

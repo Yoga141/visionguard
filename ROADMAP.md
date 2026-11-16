@@ -10,7 +10,7 @@ Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` + `backend/` Ta
 | Tahap | Isi | Status |
 |---|---|---|
 | [x] **A** | Backend Laravel inti (`./backend`, MySQL, Sanctum, endpoint §11, `POST /ai/advice`) | ✅ selesai — 36 feature test lulus; `API_CONTRACT.md` disetujui pengguna (16 Nov 2026) |
-| [ ] **B** | Midtrans Sandbox, panel admin Filament, reset kata sandi via email | ⏳ belum |
+| [ ] **B** | Midtrans Sandbox, panel admin Filament, reset kata sandi via email | 🟡 sebagian — kode + 79 feature test selesai; tinggal uji manual Sandbox dengan key milik pengguna |
 | [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — fondasi klien ada (`ApiClient`, `TokenStorage`, `ApiAuthRepository`, `ApiAiAdviceRepository`, flag `useRemoteApi`); repository API kredit/statistik, auto-login, lupa sandi, hapus akun belum |
 | [ ] **D** | Deteksi wajah asli (MediaPipe) | ⏳ belum — antarmuka `FaceAnalyzer` + `DummyFaceAnalyzer` siap; `tflite_flutter` masih dikomentari |
 | [ ] **E** | Latar belakang/system tray, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ | ⏳ belum |
@@ -109,7 +109,7 @@ PNG-01 kedip · PNG-02 jarak · PNG-03 istirahat · PNG-04 20-20-20 · PNG-05 ve
 
 ### ADM — Admin (semua ⏳)
 
-ADM-01, ADM-02, ADM-03 belum ada. Akan dibangun dengan Filament di Tahap B.
+ADM-01, ADM-02, ADM-03 ada di sisi server sejak Tahap B (Filament `/admin`, bukan bagian aplikasi Flutter). Belum diuji manual oleh pengguna.
 
 ### Lain-lain
 
@@ -179,7 +179,9 @@ Klien Flutter tidak diubah di tahap ini, jadi `flutter analyze` dan `flutter tes
 
 ### Tahap B — Midtrans Sandbox, panel admin Filament, reset kata sandi
 
-**Status:** ⏳ belum. Bergantung pada Tahap A.
+**Status:** 🟡 sebagian (16 Nov 2026). Selesai: Midtrans Snap via HTTP client (tanpa `midtrans/midtrans-php`), `PAYMENT_MODE` midtrans/simulation dengan fallback, `POST /orders`, `GET /orders/{order_code}` (+ Status API), `POST /payments/midtrans/notification`, halaman web finish/unfinish/error/simulate, Filament 5 di `/admin` (A-01..A-03), `CreditAdjustmentService`, reset sandi (API + halaman web, email Bahasa Indonesia). 79 feature test lulus, `pint --test` bersih. **Tinggal:** uji manual Sandbox (butuh key Midtrans pengguna di `backend/.env`; langkahnya di `backend/README.md`).
+
+Keputusan (DOCS_SPEC §16 #25–#28): `capture` + `fraud_status=accept` dihitung lunas; tautan reset = halaman web Laravel (bukan deep link); simulasi ditolak di produksi; nominal tidak cocok → 422; order tak dikenal → 404.
 
 **Tujuan:** pembelian kredit end-to-end di sisi server, panel admin, dan reset sandi lewat email.
 
@@ -202,9 +204,9 @@ Klien Flutter tidak diubah di tahap ini, jadi `flutter analyze` dan `flutter tes
 - Email reset: `MAIL_MAILER=log` untuk pengembangan, SMTP (mis. Mailtrap/Gmail) untuk uji nyata. **Tanyakan pengguna** format tautan reset: halaman web Laravel sederhana atau deep link ke aplikasi (memengaruhi Tahap C).
 
 **Kriteria selesai:**
-- [ ] Feature test: `POST /orders` (paket nonaktif → 422), notifikasi signature salah → ditolak & tidak ada ledger, `settlement` → +kredit sekali, notifikasi yang sama dikirim 2× → kredit tetap sekali, `expire`/`cancel`/`deny` → tanpa kredit, penyesuaian admin (alasan kosong ditolak, saldo negatif ditolak), forgot 404/200, reset 200/422, `Mail::fake` / `Notification::fake` memastikan email terkirim.
-- [ ] Panel `/admin` dapat dibuka akun admin seeder, ditolak untuk akun `user`.
-- [ ] Uji manual Sandbox: buat order → bayar di simulator Midtrans → notifikasi masuk (via tunnel) → saldo bertambah.
+- [x] Feature test: `POST /orders` (paket nonaktif → 422), notifikasi signature salah → ditolak & tidak ada ledger, `settlement` → +kredit sekali, notifikasi yang sama dikirim 2× → kredit tetap sekali, `expire`/`cancel`/`deny` → tanpa kredit, penyesuaian admin (alasan kosong ditolak, saldo negatif ditolak), forgot 404/200, reset 200/422, `Mail::fake` / `Notification::fake` memastikan email terkirim.
+- [x] Panel `/admin` dapat dibuka akun admin seeder, ditolak untuk akun `user`.
+- [ ] Uji manual Sandbox: buat order → bayar di simulator Midtrans → notifikasi masuk (via tunnel) → saldo bertambah. *(Dilakukan pengguna setelah mengisi key; panduan di `backend/README.md`.)*
 
 **Cara verifikasi:**
 ```bash
@@ -394,3 +396,4 @@ Isi satu baris setiap akhir sesi (terbaru di bawah).
 | 2026-11-16 | — | Audit ulang di `aca273a`: `lib/`/`test/` tetap tidak berubah, `backend/`, `API_CONTRACT.md`, `HANDOFF.md` belum ada; `flutter analyze` 0 issue, `flutter test` 127 lulus; status tahap A–F tidak berubah | — |
 | 2026-11-16 | A | Backend Laravel 13 dibuat di `backend/`: migration 7 tabel §12.2, model + relasi, `MonitoringDayService` (§8.2), 12 endpoint `/api`, Gemini proxy + rate limit, seeder, 36 feature test lulus, `API_CONTRACT.md`, `backend/README.md`. `flutter analyze`/`test` tetap bersih | Keputusan §16 #18–#24. Menunggu persetujuan `API_CONTRACT.md`. Skeleton Laravel menambah `backend/CLAUDE.md` & `backend/AGENTS.md` (instruksi Laravel Boost), belum dipasang; hapus atau pasang Boost sesuai keputusan pengguna |
 | 2026-11-16 | A | Pengguna menyetujui `API_CONTRACT.md` & keputusan §16 #18–#24 → Tahap A selesai. `backend/CLAUDE.md` & `backend/AGENTS.md` (Laravel Boost) dihapus | Laravel Boost tidak dipakai; instruksi AI hanya di `AGENTS.md` root |
+| 2026-11-16 | B | Midtrans Snap (HTTP client) + mode simulation, `POST /orders`, `GET /orders/{order_code}`, notifikasi bersignature (idempoten), Filament 5 `/admin` (paket, transaksi, pengguna + penyesuaian kredit), reset sandi API + web. 79 feature test lulus. Key hanya lewat `config('services.midtrans.*')`; `.env` diberi variabel Midtrans kosong | §16 #25–#28. Tinggal uji manual Sandbox oleh pengguna |

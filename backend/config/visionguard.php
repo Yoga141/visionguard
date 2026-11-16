@@ -33,6 +33,14 @@ return [
         'tired_min' => 60, // 60–100 Lelah
     ],
 
+    // §8.4 — mode pembayaran: 'midtrans' (Snap) atau 'simulation' (halaman bayar tiruan).
+    // 'midtrans' dengan MIDTRANS_SERVER_KEY kosong otomatis menjadi 'simulation'.
+    // 'simulation' ditolak saat APP_ENV=production (§16 #25).
+    'payment_mode' => env('PAYMENT_MODE', 'midtrans'),
+
+    // Prefix kode order (orders.order_code ≤ 40 karakter).
+    'order_code_prefix' => 'VG',
+
     // §17.4 — batas pemakaian Saran AI per pengguna.
     'ai_advice' => [
         'max_per_hour' => (int) env('AI_ADVICE_MAX_PER_HOUR', 10),

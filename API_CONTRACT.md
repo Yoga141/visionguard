@@ -1,4 +1,4 @@
-# API_CONTRACT — VisionGuard REST API v1 (Tahap A)
+# API_CONTRACT — VisionGuard REST API v1 (Tahap A + B)
 
 Kontrak JSON antara aplikasi Flutter dan backend Laravel (`./backend`).
 Menutup DOCS_SPEC §16 #8 dan #9. Bila bertentangan dengan `DOCS_SPEC.md`, `DOCS_SPEC.md` yang berlaku.
@@ -15,11 +15,11 @@ Menutup DOCS_SPEC §16 #8 dan #9. Bila bertentangan dengan `DOCS_SPEC.md`, `DOCS
 |---|---|---|
 | 401 | Token tidak ada/tidak berlaku, atau kredensial login salah | `{ "message": "Unauthenticated." }` / `{ "message": "Email atau kata sandi salah." }` |
 | 402 | Kuota gratis & kredit habis (aktivasi) | `{ "message": "...", ...status kredit }` |
-| 403 | Verifikasi kata sandi gagal (hapus akun) | `{ "message": "..." }` |
-| 404 | Rute tidak ada | `{ "message": "..." }` |
+| 403 | Verifikasi kata sandi gagal (hapus akun) / signature notifikasi salah | `{ "message": "..." }` |
+| 404 | Rute/order tidak ada, email tidak terdaftar (lupa sandi) | `{ "message": "..." }` |
 | 422 | Validasi gagal | `{ "message": "...", "errors": { "field": ["pesan", ...] } }` |
-| 429 | Login ditahan / batas Saran AI | `{ "message": "...", "retry_after": 300 }` + header `Retry-After` |
-| 503 | Layanan AI tidak tersedia | `{ "message": "..." }` |
+| 429 | Login ditahan / batas Saran AI / lupa sandi terlalu sering | `{ "message": "...", "retry_after": 300 }` + header `Retry-After` |
+| 503 | Layanan AI / gerbang pembayaran tidak tersedia | `{ "message": "..." }` |
 
 ## Ringkasan endpoint
 
@@ -27,6 +27,8 @@ Menutup DOCS_SPEC §16 #8 dan #9. Bila bertentangan dengan `DOCS_SPEC.md`, `DOCS
 |---|---|---|---|---|
 | POST | `/auth/register` | publik | 201 | 422 |
 | POST | `/auth/login` | publik | 200 | 401, 422, 429 |
+| POST | `/auth/forgot-password` | publik | 200 | 404, 422, 429 |
+| POST | `/auth/reset-password` | publik | 200 | 422, 429 |
 | POST | `/auth/logout` | token | 200 | 401 |
 | GET | `/me` | token | 200 | 401 |
 | DELETE | `/me` | token | 200 | 401, 403, 422 |
@@ -34,11 +36,14 @@ Menutup DOCS_SPEC §16 #8 dan #9. Bila bertentangan dengan `DOCS_SPEC.md`, `DOCS
 | GET | `/credits/status` | token | 200 | 401 |
 | GET | `/credit-packages` | token | 200 | 401 |
 | GET | `/credits/history` | token | 200 | 401 |
+| POST | `/orders` | token | 201 | 401, 422, 503 |
+| GET | `/orders/{order_code}` | token | 200 | 401, 404 |
+| POST | `/payments/midtrans/notification` | publik (signature) | 200 | 403, 404, 422 |
 | POST | `/stats/daily` | token | 200 | 401, 422 |
 | GET | `/stats?range=7\|30` | token | 200 | 401, 422 |
 | POST | `/ai/advice` | token | 200 | 401, 422, 429, 503 |
 
-Belum ada (Tahap B): `POST /auth/forgot-password`, `POST /auth/reset-password`, `POST /orders`, `POST /payments/midtrans/notification`.
+Halaman web (di luar `/api`): `/payments/finish`, `/payments/unfinish`, `/payments/error`, `/payments/simulate/{order_code}` (mode simulasi), `/reset-password/{token}`. Panel admin: `/admin` (Filament, role admin).
 
 ---
 
@@ -103,6 +108,39 @@ Klien menyimpan `device_id` untuk `POST /monitoring-days/activate` dan `POST /st
 ```json
 { "message": "Terlalu banyak percobaan login. Coba lagi dalam 5 menit.", "retry_after": 300 }
 ```
+
+### POST /auth/forgot-password — UC-03 *(publik)*
+
+Request:
+```json
+{ "email": "budi@contoh.id" }
+```
+**200 OK** — email berisi tautan `https://<host>/reset-password/<token>?email=...` (berlaku 60 menit).
+```json
+{ "message": "Tautan reset kata sandi telah dikirim ke email Anda. Berlaku 60 menit." }
+```
+**404** `{ "message": "Email tidak terdaftar." }` · **429** diminta lagi < 60 detik untuk email yang sama, atau > 10 request/menit/IP.
+
+Pengguna mengisi sandi baru di halaman web tersebut. Klien juga boleh memanggil endpoint berikut langsung.
+
+### POST /auth/reset-password — UC-03 *(publik)*
+
+Request (sandi diisi dua kali):
+```json
+{ "email": "budi@contoh.id", "token": "<token dari tautan>", "password": "sandiBaru123", "password_confirmation": "sandiBaru123" }
+```
+**200 OK** — semua token Sanctum pengguna dicabut; login ulang dengan sandi baru.
+```json
+{ "message": "Kata sandi berhasil diganti. Silakan login." }
+```
+**422** token salah/kedaluwarsa/sudah dipakai:
+```json
+{
+  "message": "Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan baru.",
+  "errors": { "token": ["Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan baru."] }
+}
+```
+**422** juga untuk `password` < 8 karakter atau konfirmasi tidak sama (`errors.password`).
 
 ### POST /auth/logout — UC-04
 
@@ -248,6 +286,86 @@ Order dan mutasi ledger, masing-masing terbaru dulu.
 ```
 - `orders[].status`: `pending | settlement | expire | cancel | deny`.
 - `ledger[].reason`: `purchase | usage | adjustment` (`note` terisi untuk `adjustment`).
+
+---
+
+## Pembayaran (§8.4, UC-19)
+
+Mode server (`PAYMENT_MODE`): `midtrans` (Snap Sandbox/Production) atau `simulation` (halaman bayar tiruan; otomatis dipakai bila server key kosong, ditolak di produksi). Klien memperlakukan keduanya sama: buka `redirect_url`, lalu muat ulang status.
+
+### POST /orders
+
+Request:
+```json
+{ "package_id": 1 }
+```
+**201 Created** — order `pending`, harga dari server.
+```json
+{
+  "order_code": "VG-261116100500-AB12CD",
+  "snap_token": "66e4fa55-fdac-4ef9-91b5-733b97d1b862",
+  "redirect_url": "https://app.sandbox.midtrans.com/snap/v4/redirection/66e4fa55-fdac-4ef9-91b5-733b97d1b862",
+  "payment_mode": "midtrans",
+  "order": {
+    "id": 3,
+    "order_code": "VG-261116100500-AB12CD",
+    "package_id": 1,
+    "package_name": "Paket Hemat",
+    "credits": 5,
+    "amount_idr": 15000,
+    "status": "pending",
+    "payment_type": null,
+    "paid_at": null,
+    "created_at": "2026-11-16T03:05:00+00:00"
+  }
+}
+```
+- Mode `simulation`: `snap_token` berawalan `SIM-`, `redirect_url` = `https://<host>/payments/simulate/<order_code>`.
+- Setelah bayar, Snap mengarahkan ke `/payments/finish?order_id=...` yang meminta pengguna kembali ke aplikasi.
+
+**422** paket tidak ada/nonaktif: `{ "message": "Paket kredit tidak tersedia.", "errors": { "package_id": ["Paket kredit tidak tersedia."] } }`
+**503** Midtrans gagal (order tidak dibuat): `{ "message": "Gagal membuat transaksi pembayaran." }`
+
+### GET /orders/{order_code}
+
+Untuk tombol "Muat ulang status". Hanya order milik pengguna (lainnya **404**).
+Bila order masih `pending` dan mode `midtrans`, server mengecek Status API Midtrans dan memprosesnya seperti notifikasi (idempoten).
+
+**200 OK**
+```json
+{ "order": { "order_code": "VG-261116100500-AB12CD", "status": "settlement", "payment_type": "qris", "paid_at": "2026-11-16T03:10:00+00:00", "...": "..." }, "credit_balance": 9 }
+```
+
+### POST /payments/midtrans/notification *(publik, dipanggil Midtrans)*
+
+Isi **Payment Notification URL** di dashboard Midtrans: `https://<host>/api/payments/midtrans/notification`. Tanpa token, tanpa CSRF.
+
+Request (contoh dari Midtrans):
+```json
+{
+  "order_id": "VG-261116100500-AB12CD",
+  "status_code": "200",
+  "gross_amount": "15000.00",
+  "transaction_status": "settlement",
+  "fraud_status": "accept",
+  "payment_type": "qris",
+  "settlement_time": "2026-11-16 10:10:00",
+  "signature_key": "<sha512>"
+}
+```
+- `signature_key` wajib = `SHA512(order_id + status_code + gross_amount + server_key)`.
+
+| Kondisi | Hasil | HTTP |
+|---|---|---|
+| Signature tidak valid / field kurang | ditolak, dicatat di log | 403 |
+| `order_id` tidak dikenal | dicatat di log | 404 |
+| `gross_amount` ≠ harga order | ditolak, dicatat di log | 422 |
+| `settlement`, atau `capture` + `fraud_status=accept` | order `settlement` (+`payment_type`, `paid_at`) + ledger `purchase` (+kredit paket), sekali saja | 200 |
+| `pending`, `capture` + `challenge` | tidak berubah | 200 |
+| `expire` / `cancel` / `deny` / `failure` | order `expire` / `cancel` / `deny` / `deny`, tanpa kredit (hanya bila masih pending) | 200 |
+| Notifikasi berulang | tidak menambah kredit lagi | 200 |
+
+Respons: `{ "message": "..." }`.
 
 ---
 

@@ -35,6 +35,15 @@ return [
         ],
     ],
 
+    // Midtrans Snap (DOCS_SPEC §8.4). Key hanya di backend/.env; akses lewat config('services.midtrans.*').
+    'midtrans' => [
+        'server_key' => env('MIDTRANS_SERVER_KEY'),
+        'client_key' => env('MIDTRANS_CLIENT_KEY'),
+        'merchant_id' => env('MIDTRANS_MERCHANT_ID'),
+        'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
+        'timeout' => (int) env('MIDTRANS_TIMEOUT', 15),
+    ],
+
     // Saran AI (DOCS_SPEC §17.4). Key hanya di backend/.env, tidak pernah di klien.
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),

@@ -12,7 +12,7 @@ Instruksi tunggal untuk semua AI coding assistant (Claude Code, OpenCode, Antigr
 
 ## 2. Ringkasan proyek
 
-VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi dini kelelahan mata digital. Kamera dipakai untuk menghitung blink rate, PERCLOS, dan jarak wajah ke layar secara *on-device*, lalu digabung menjadi skor kelelahan 0–100 yang memicu pengingat. Backend Laravel + MySQL ada di folder `backend/` (Tahap A: akun, kredit, statistik, Saran AI; Midtrans & panel admin menyusul di Tahap B).
+VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi dini kelelahan mata digital. Kamera dipakai untuk menghitung blink rate, PERCLOS, dan jarak wajah ke layar secara *on-device*, lalu digabung menjadi skor kelelahan 0–100 yang memicu pengingat. Backend Laravel + MySQL ada di folder `backend/` (Tahap A–B: akun, kredit, statistik, Saran AI, Midtrans, panel admin Filament, reset sandi).
 
 ## 3. Stack
 
@@ -20,7 +20,7 @@ VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi
 - **State management:** `flutter_riverpod` 2.x
 - **Navigasi:** `go_router` 14
 - **Kamera:** `camera` / `camera_windows`
-- **Backend (`backend/`):** Laravel 13 (PHP ≥ 8.3, Laravel Herd) + Sanctum + MySQL 8 (`DB_DATABASE=visionguard`). Kontrak JSON di `API_CONTRACT.md` (root); aturan bisnis server di `backend/config/visionguard.php`. `backend/.env` (kredensial DB, `GEMINI_API_KEY`) tidak boleh di-commit; contoh di `backend/.env.example`. Panduan: `backend/README.md`.
+- **Backend (`backend/`):** Laravel 13 (PHP ≥ 8.3, Laravel Herd) + Sanctum + MySQL 8 (`DB_DATABASE=visionguard`) + **Filament 5** (panel admin `/admin`, role admin) + Midtrans Snap lewat HTTP client (`PAYMENT_MODE=midtrans|simulation`; server key kosong → simulation). Kontrak JSON di `API_CONTRACT.md` (root); aturan bisnis server di `backend/config/visionguard.php`. `backend/.env` (kredensial DB, `GEMINI_API_KEY`) tidak boleh di-commit; contoh di `backend/.env.example`. Panduan: `backend/README.md`.
 - **Jaringan:** `dio` (REST JSON ke Laravel) + `flutter_secure_storage` (token Sanctum). Klien belum terhubung ke backend (Tahap C).
 - **Saran AI (fitur tambahan, DOCS_SPEC §17):** `google_generative_ai` + `flutter_dotenv` (`GEMINI_API_KEY` di `.env`). Pemanggilan langsung dari klien **khusus pengembangan**; versi final wajib lewat backend `POST /ai/advice`.
 - **Database lokal:** SQLite via `drift` + `drift_flutter` (file di folder `getApplicationSupportDirectory` dari `path_provider`), skema persis DOCS_SPEC §12.3. Kode `app_database.g.dart` dihasilkan `drift_dev` + `build_runner`.
@@ -35,8 +35,10 @@ VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi
 
 ```
 backend/
-├── app/Http/Controllers/Api/  # AuthController, AccountController, MonitoringDayController,
-│                              # CreditController, StatsController, AiAdviceController
+├── app/Filament/Resources/    # CreditPackages (A-01), Orders (A-02, baca saja), Users (A-03 + Sesuaikan kredit)
+├── app/Http/Controllers/Api/  # Auth, PasswordReset, Account, MonitoringDay, Credit, Order,
+│                              # PaymentNotification, Stats, AiAdvice
+├── app/Http/Controllers/Web/  # PaymentPage (finish/unfinish/error/simulate), PasswordResetPage
 ├── app/Http/Requests/         # Form Request per endpoint (validasi)
 ├── app/Http/Resources/        # format JSON (datar, tanpa "data")
 ├── app/Http/Middleware/       # ForceJsonResponse (semua /api menjawab JSON)
@@ -44,15 +46,20 @@ backend/
 │                              # Order, CreditLedger (append-only), MonitoringDay, DailyStat
 ├── app/Services/              # MonitoringDayService (§8.2, DB transaction + lockForUpdate),
 │                              # StatsService, AccountService (hapus/anonimkan), DeviceService,
-│                              # LoginThrottle (5× gagal → 5 menit), GeminiAdviceService
+│                              # LoginThrottle (5× gagal → 5 menit), GeminiAdviceService, OrderService,
+│                              # CreditAdjustmentService (§8.5), PasswordResetService
+├── app/Services/Payments/     # PaymentManager (mode), MidtransGateway, SimulationGateway,
+│                              # PaymentNotificationService (signature SHA-512, idempoten)
+├── resources/views/           # halaman web pembayaran & form reset sandi
 ├── config/visionguard.php     # satu-satunya tempat aturan bisnis server (kuota, lockout, rate limit AI)
 ├── database/migrations/       # 7 tabel §12.2 (+ orders.created_at, §16 #18)
 ├── database/seeders/          # admin, demo, 3 paket aktif
-├── routes/api.php
-└── tests/Feature/             # Auth, MonitoringDay, Credit, Stats, Account, AiAdvice
+├── routes/api.php, routes/web.php
+└── tests/Feature/             # Auth, MonitoringDay, Credit, Stats, Account, AiAdvice, PasswordReset,
+                               # AdminPanel, Payments/{Order, PaymentNotification, PaymentMode}
 ```
 
-Aturan backend: saldo selalu `SUM(credit_ledger.delta)`; ledger tidak pernah di-update/delete (kecuali anonimisasi FK saat hapus akun); tidak ada kolom gambar; hanya angka ringkasan §17.2 yang diteruskan ke Gemini. Instruksi AI hanya ada di `AGENTS.md` root ini; **jangan** menambah `CLAUDE.md`/`AGENTS.md` di `backend/` dan jangan memasang Laravel Boost.
+Aturan backend: saldo selalu `SUM(credit_ledger.delta)`; ledger tidak pernah di-update/delete (kecuali anonimisasi FK saat hapus akun); tidak ada kolom gambar; hanya angka ringkasan §17.2 yang diteruskan ke Gemini; kredit pembelian hanya dari notifikasi bersignature valid (`PaymentNotificationService`), jangan menambah kredit di tempat lain. **Key (Midtrans, Gemini, SMTP) hanya di `backend/.env`**: jangan diminta, ditebak, ditulis di kode/test/dokumen, atau dicetak; akses lewat `config('services.*')`. Test memakai key dummy (`phpunit.xml` mengosongkan key asli). Instruksi AI hanya ada di `AGENTS.md` root ini; **jangan** menambah `CLAUDE.md`/`AGENTS.md` di `backend/` dan jangan memasang Laravel Boost.
 
 ### 4.2 `lib/` (Flutter)
 

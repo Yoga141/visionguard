@@ -6,16 +6,16 @@ Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard 
 
 ## Status: Progress 50%
 
-Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel inti sudah ada di `backend/`
-(Tahap A, lihat `backend/README.md` dan `API_CONTRACT.md`), tetapi aplikasi **belum** terhubung
+Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel sudah ada di `backend/`
+(Tahap A–B, lihat `backend/README.md` dan `API_CONTRACT.md`), tetapi aplikasi **belum** terhubung
 (Tahap C), sehingga fitur yang butuh server masih memakai repository **tiruan** (fake). Status di
-tabel ini menilai sisi aplikasi. Midtrans & panel admin menyusul di Tahap B.
+tabel ini menilai sisi aplikasi. Server sudah punya Midtrans Snap (+ mode simulasi), panel admin Filament, dan reset kata sandi.
 
 | ID | Kebutuhan (DOCS_SPEC §5) | Status | Catatan |
 |---|---|---|---|
 | AKN-01 | Daftar dengan nama, email, kata sandi | 🟡 sebagian | Form & validasi selesai; `FakeAuthRepository`, klien REST `ApiAuthRepository` siap |
 | AKN-02 | Login & logout | 🟡 sebagian | Pengguna: selesai (repository tiruan); admin (Filament) di luar repo ini |
-| AKN-03 | Reset kata sandi via email | ⏳ belum | Tombol "Lupa kata sandi?" menampilkan info "setelah backend siap" |
+| AKN-03 | Reset kata sandi via email | 🟡 sebagian | Server: email + halaman web sandi baru selesai; tombol di aplikasi belum memanggil API (Tahap C) |
 | AKN-04 | Hapus akun | 🟡 sebagian | Konfirmasi di Pengaturan; penghapusan permanen setelah backend |
 | KLB-01 | Penjelasan privasi & izin kamera | ✅ selesai | S-02, penafian medis |
 | KLB-02 | Kalibrasi mata 10 detik (baseline EAR) | ✅ selesai | Median 10 dtk |
@@ -40,11 +40,14 @@ tabel ini menilai sisi aplikasi. Midtrans & panel admin menyusul di Tahap B.
 | STK-02 | Grafik tren 7 & 30 hari | ✅ selesai | `fl_chart`; "data belum cukup" bila < 2 hari |
 | STK-03 | Sinkron ringkasan ke server | 🟡 sebagian | `daily_summaries.synced` + `FakeStatsRepository`; `POST /stats/daily` belum |
 | KRD-01 | Kuota gratis, saldo, status hari ini | 🟡 sebagian | S-09 & Dashboard selesai; data dari `FakeCreditRepository` |
-| KRD-02 | Beli paket via Midtrans | ⏳ belum | Daftar paket + tombol Beli → dialog "setelah backend siap" |
-| KRD-03 | Kredit bertambah setelah pembayaran | ⏳ belum | Butuh notifikasi Midtrans di server |
+| KRD-02 | Beli paket via Midtrans | 🟡 sebagian | Server: `POST /orders` + Snap selesai; aplikasi masih dialog "setelah backend siap" (Tahap C) |
+| KRD-03 | Kredit bertambah setelah pembayaran | 🟡 sebagian | Server: notifikasi bersignature + idempoten selesai; uji Sandbox manual belum |
 | KRD-04 | Riwayat transaksi & pemakaian | 🟡 sebagian | UI selesai; data tiruan |
 | PGT-01 | Sensitivitas, jenis pengingat, interval | ✅ selesai | τ 0,65/0,70/0,75; interval 10–60 mnt |
 | PGT-02 | Autostart | ⏳ belum | Tampil "segera hadir" |
+| ADM-01 | Admin kelola paket kredit | ✅ selesai | Filament `/admin` → Paket Kredit (paket pernah dibeli tidak bisa dihapus) |
+| ADM-02 | Admin lihat pengguna & transaksi | ✅ selesai | Filament → Transaksi (filter status & tanggal) dan Pengguna (saldo) |
+| ADM-03 | Admin sesuaikan kredit + alasan | ✅ selesai | Aksi "Sesuaikan kredit" (alasan wajib, saldo akhir ≥ 0) |
 
 Fitur tambahan: **Saran AI** (§17) — kartu "Minta saran" di Dashboard (saat Mode AI) dan
 Statistik; hanya angka ringkasan yang dikirim, saran statis bila key kosong/gagal. Panggilan

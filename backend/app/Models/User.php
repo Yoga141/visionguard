@@ -2,11 +2,15 @@
 
 namespace App\Models;
 
+use App\Notifications\ResetPasswordNotification;
 use Carbon\CarbonImmutable;
 use Database\Factories\UserFactory;
+use Filament\Models\Contracts\FilamentUser;
+use Filament\Panel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
 
 /**
@@ -21,10 +25,10 @@ use Laravel\Sanctum\HasApiTokens;
  * @property string $role
  * @property string $timezone
  */
-class User extends Authenticatable
+class User extends Authenticatable implements FilamentUser
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory;
+    use HasApiTokens, HasFactory, Notifiable;
 
     public const ROLE_USER = 'user';
 
@@ -35,6 +39,9 @@ class User extends Authenticatable
 
     /** Nama kolom sandi untuk guard/Hash bawaan Laravel. */
     protected $authPasswordName = 'password_hash';
+
+    /** Tabel `users` tidak punya `remember_token` (§12.2) → fitur "ingat saya" tidak menyimpan apa pun. */
+    protected $rememberTokenName = '';
 
     protected $fillable = ['name', 'email', 'password_hash', 'role', 'timezone'];
 
@@ -76,6 +83,18 @@ class User extends Authenticatable
     public function isAdmin(): bool
     {
         return $this->role === self::ROLE_ADMIN;
+    }
+
+    /** Panel admin Filament /admin hanya untuk role admin (AKN-02, ADM). */
+    public function canAccessPanel(Panel $panel): bool
+    {
+        return $this->isAdmin();
+    }
+
+    /** UC-03: email reset berbahasa Indonesia, tautan ke halaman web `password.reset`. */
+    public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 
     /** Saldo kredit = SUM(delta) seluruh ledger milik pengguna (§8.3, KMN-03). */

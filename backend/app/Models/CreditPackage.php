@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
 
 /** D9 Paket Kredit — DOCS_SPEC §12.2 `credit_packages`, §8.6. */
 class CreditPackage extends Model
@@ -20,6 +21,21 @@ class CreditPackage extends Model
             'price_idr' => 'integer',
             'is_active' => 'boolean',
         ];
+    }
+
+    /** Paket yang pernah dibeli tidak boleh dihapus, hanya dinonaktifkan (§8.6). */
+    protected static function booted(): void
+    {
+        static::deleting(function (CreditPackage $package) {
+            if ($package->wasPurchased()) {
+                throw new LogicException('Paket yang pernah dibeli tidak boleh dihapus, nonaktifkan saja.');
+            }
+        });
+    }
+
+    public function wasPurchased(): bool
+    {
+        return $this->orders()->exists();
     }
 
     public function orders(): HasMany

@@ -461,26 +461,30 @@ Setujui privasi & izin → `CalibrationService.mulaiKalibrasi()` → `CameraSour
 |---|---|---|---|---|---|
 | POST | `/auth/register` | AuthController | publik | Registrasi (UC-01) | **201 Created + token**; **422** email sudah dipakai |
 | POST | `/auth/login` | AuthController | publik | Login + catat perangkat (UC-02) | **200 OK + token**; **401 Unauthorized** |
-| POST | `/auth/forgot-password` | AuthController | publik | Buat token reset 60 menit + kirim email (UC-03) | **404** email tidak ditemukan; sukses → email terkirim |
-| POST | `/auth/reset-password` | AuthController | publik | Validasi token, update hash sandi | **200 OK**; **422** token tidak valid/kedaluwarsa |
+| POST | `/auth/forgot-password` | PasswordResetController | publik | Buat token reset 60 menit + kirim email (UC-03) | **200** email terkirim; **404** email tidak ditemukan; **429** terlalu sering |
+| POST | `/auth/reset-password` | PasswordResetController | publik | Validasi token, update hash sandi, cabut semua token | **200 OK**; **422** token tidak valid/kedaluwarsa |
 | POST | `/monitoring-days/activate` | MonitoringDayController | token | Aktivasi Hari Pemantauan AI (§8.2) | **200 OK + sisa kuota & saldo**; **402** kredit tidak cukup |
 | GET | `/credits/status` | (CreditController) | token | Kuota gratis, saldo, status hari ini (UC-18, UC-11, setelah bayar) | status hari ini + saldo |
-| POST | `/orders` | OrderController | token | Buat order pending + Snap token (UC-19) | `snap_token` + `order_code` |
-| POST | *(notifikasi Midtrans)* | PaymentNotificationController | publik, **wajib verifikasi signature SHA-512** | Proses status pembayaran (§8.4) | **200 OK** ke Midtrans |
+| POST | `/orders` | OrderController | token | Buat order pending + Snap token (UC-19) | **201** `snap_token` + `redirect_url` + `order_code`; **422** paket tidak aktif; **503** gerbang gagal |
+| GET | `/orders/{order_code}` | OrderController | token | Status order ("Muat ulang status"); order pending dicek ke Status API Midtrans | **200** order + saldo; **404** bukan milik pengguna |
+| POST | `/payments/midtrans/notification` | PaymentNotificationController | publik, tanpa CSRF, **wajib verifikasi signature SHA-512** | Proses status pembayaran (§8.4) | **200 OK** notifikasi valid; **403** signature salah; **404** order tak dikenal; **422** nominal tidak cocok |
 | POST | `/stats/daily` | StatsController | token | Upsert ringkasan harian | **200 OK** |
 | GET | `/stats` | StatsController | token | Data tren rentang **7 / 30 hari** | data tren |
 | DELETE | `/me` | AccountController | token | Hapus akun (UC-05), body berisi kata sandi | **200 OK**; **403** verifikasi gagal |
 
 ### 11.2 Endpoint yang dibutuhkan use case tetapi path-nya belum ditulis di SDD
-*(Nama path di bawah adalah usulan; konfirmasikan dulu sebelum dianggap final.)*
+*(**Final** sejak Tahap A–B, disetujui pengguna; kontrak lengkap di `API_CONTRACT.md`. Lihat §16 #20 dan #26.)*
 
 | Usulan | Kebutuhan |
 |---|---|
 | `POST /auth/logout` | UC-04 cabut token perangkat |
 | `GET /credit-packages` | UC-19 daftar paket aktif |
-| `GET /orders` + mutasi ledger (mis. `GET /credits/history`) | UC-20 / KRD-04 riwayat transaksi & pemakaian |
-| `POST /payments/midtrans/notification` | Endpoint notifikasi Midtrans |
+| `GET /credits/history` (order + ledger sekaligus) | UC-20 / KRD-04 riwayat transaksi & pemakaian |
+| `POST /payments/midtrans/notification` | Endpoint notifikasi Midtrans (Payment Notification URL di dashboard) |
+| `GET /orders/{order_code}` | Muat ulang status order (UC-19 alur notifikasi terlambat) |
 | `GET /me` | Profil/role (opsional) |
+
+Halaman web (bukan API): `/payments/finish`, `/payments/unfinish`, `/payments/error` (tujuan redirect Snap → "kembali ke aplikasi"), `/payments/simulate/{order_code}` (mode simulasi saja), `/reset-password/{token}` (form sandi baru dari email).
 
 Panel admin **tidak** memakai REST app — dibangun dengan **Filament** (`CreditPackageResource`, `CreditAdjustmentController`, resource Pengguna & Transaksi dengan filter status & tanggal).
 
@@ -706,6 +710,10 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 22 | Batas pemakaian Saran AI (429) & perilaku saat AI gagal belum ditentukan (§17.4). | **Diterapkan:** **10 permintaan/jam/pengguna** (`AI_ADVICE_MAX_PER_HOUR`); key kosong atau Gemini gagal → **503**; model `gemini-2.0-flash`; prompt sama dengan klien; prompt & respons tidak disimpan/di-log. Saran AI gratis (tidak memakai kuota/kredit) sampai SRS direvisi. |
 | 23 | Statistik dari beberapa perangkat pada hari yang sama (`UNIQUE(user_id, device_id, day)`) perlu digabung untuk grafik tren. | **Diterapkan:** `GET /stats` menjumlahkan `screen_minutes`, `alerts_count`, `breaks_taken`; rata-rata BR/jarak/skor ditimbang dengan `screen_minutes`. |
 | 24 | Versi Laravel & DB test tidak ditentukan. | **Diterapkan:** Laravel 13 (PHP ≥ 8.3; Herd memakai PHP 8.5). Feature test memakai SQLite in-memory (`phpunit.xml`); pengembangan memakai MySQL `visionguard`. |
+| 25 | Mode pembayaran untuk demo/test tanpa akun Midtrans tidak diatur SDD. | **Diterapkan (Tahap B, 16 Nov 2026):** `PAYMENT_MODE=midtrans\|simulation`. `midtrans` + `MIDTRANS_SERVER_KEY` kosong → otomatis `simulation` + peringatan di log (tanpa key). Simulasi: halaman `/payments/simulate/{order_code}` mengirim notifikasi berformat Midtrans yang ditandatangani kunci turunan `APP_KEY` dan diproses oleh logika yang sama. **Simulasi ditolak saat `APP_ENV=production`** (agar tidak ada kredit gratis). |
+| 26 | Detail pemrosesan notifikasi Midtrans tidak dirinci (§8.4). | **Diterapkan:** order tak dikenal → **404**; signature valid tetapi `gross_amount` ≠ `amount_idr` → **422**, tanpa kredit; `capture` + `fraud_status=accept` = lunas, `challenge` = tetap pending; `failure` → `deny`; status final hanya ditulis bila order masih `pending` (order lunas tidak pernah diturunkan); kredit = `credit_packages.credits` saat lunas; `paid_at` dari `settlement_time` (WIB → UTC). Snap menerima `item_details` paket & `customer_details` (nama, email). Bila Snap gagal → order dihapus, **503**. `GET /orders/{order_code}` mengecek Status API Midtrans untuk order pending (cadangan notifikasi terlambat, idempoten). Snap API hanya mendukung `callbacks.finish`; URL unfinish/error diisi di dashboard Midtrans. |
+| 27 | Format tautan reset sandi (halaman web atau deep link) & perilaku setelah reset belum ditentukan. | **Diterapkan:** tautan email → halaman web Laravel `/reset-password/{token}?email=` (bukan deep link). Reset sukses mencabut semua token Sanctum. Permintaan tautan ulang < 60 dtk untuk email yang sama → **429**; batas 10 req/menit/IP untuk kedua endpoint. Email berbahasa Indonesia. `MAIL_MAILER=log` bawaan; SMTP Gmail (App Password) didokumentasikan di `.env.example`. |
+| 28 | Detail panel admin Filament. | **Diterapkan:** Filament 5 di `/admin`, hanya `role=admin` (`User::canAccessPanel`). A-01 paket: tambah/ubah/aktif-nonaktif; hapus hanya bila belum pernah dibeli (UI + guard model + FK RESTRICT). A-02 transaksi: hanya baca, filter status & tanggal. A-03 pengguna: hanya baca + saldo + aksi "Sesuaikan kredit" (`CreditAdjustmentService`: alasan wajib, delta ≠ 0, saldo akhir ≥ 0). Tabel `users` tanpa `remember_token`, jadi "ingat saya" di login admin tidak menyimpan apa pun. |
 
 ---
 
