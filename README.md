@@ -6,8 +6,10 @@ Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard 
 
 ## Status: Progress 50%
 
-Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel + Midtrans belum ada, sehingga
-fitur yang butuh server memakai repository **tiruan** (fake) di aplikasi.
+Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel inti sudah ada di `backend/`
+(Tahap A, lihat `backend/README.md` dan `API_CONTRACT.md`), tetapi aplikasi **belum** terhubung
+(Tahap C), sehingga fitur yang butuh server masih memakai repository **tiruan** (fake). Status di
+tabel ini menilai sisi aplikasi. Midtrans & panel admin menyusul di Tahap B.
 
 | ID | Kebutuhan (DOCS_SPEC §5) | Status | Catatan |
 |---|---|---|---|

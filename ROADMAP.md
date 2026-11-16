@@ -3,13 +3,13 @@
 Panduan kerja untuk AI agent berikutnya (Claude Code, Antigravity, OpenCode, dll.).
 Dokumen ini **tidak** menggantikan `DOCS_SPEC.md`. Jika ada yang bertentangan, `DOCS_SPEC.md` yang berlaku.
 
-Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` (progress 50%; `lib/` dan `test/` tidak berubah sejak `3ba90c3`).
+Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` + `backend/` Tahap A (belum di-commit). `lib/` dan `test/` tidak berubah sejak `3ba90c3`.
 
 **Ringkasan tahap**
 
 | Tahap | Isi | Status |
 |---|---|---|
-| [ ] **A** | Backend Laravel inti (`./backend`, MySQL, Sanctum, endpoint §11, `POST /ai/advice`) | ⏳ belum — folder `backend/` belum ada |
+| [x] **A** | Backend Laravel inti (`./backend`, MySQL, Sanctum, endpoint §11, `POST /ai/advice`) | ✅ selesai — 36 feature test lulus; `API_CONTRACT.md` disetujui pengguna (16 Nov 2026) |
 | [ ] **B** | Midtrans Sandbox, panel admin Filament, reset kata sandi via email | ⏳ belum |
 | [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — fondasi klien ada (`ApiClient`, `TokenStorage`, `ApiAuthRepository`, `ApiAiAdviceRepository`, flag `useRemoteApi`); repository API kredit/statistik, auto-login, lupa sandi, hapus akun belum |
 | [ ] **D** | Deteksi wajah asli (MediaPipe) | ⏳ belum — antarmuka `FaceAnalyzer` + `DummyFaceAnalyzer` siap; `tflite_flutter` masih dikomentari |
@@ -39,7 +39,7 @@ Urutan wajib A → B → C. Tahap D dan E tidak bergantung pada backend, jadi bo
 
 ## 1. Status saat ini (progress 50%)
 
-Diverifikasi ulang 16 Nov 2026 terhadap kode di `lib/` dan `test/` (commit `aca273a`). Folder `backend/` **belum ada**. Semua fitur yang butuh server memakai repository tiruan (`Fake*Repository`).
+Diverifikasi ulang 16 Nov 2026 terhadap kode di `lib/` dan `test/` (commit `aca273a`). Folder `backend/` dibuat di Tahap A (16 Nov 2026), tetapi klien **belum** terhubung: semua fitur yang butuh server di aplikasi masih memakai repository tiruan (`Fake*Repository`). Tabel di bawah menilai sisi klien; sisi server lihat Tahap A.
 `flutter analyze`: 0 issue · `flutter test`: 127 test lulus.
 
 Perubahan sejak `3ba90c3` (di luar `lib/`): `android/build.gradle.kts` menyuntik `androidx.concurrent:concurrent-futures:1.2.0` ke `camera_android_camerax` agar build APK berhasil di Gradle 9.x. Commit `aca273a` juga ikut memasukkan `android/build/reports/problems/problems-report.html` (hasil build); sebaiknya dikeluarkan dari Git dan ditambahkan ke `.gitignore` oleh pengguna.
@@ -123,7 +123,9 @@ ADM-01, ADM-02, ADM-03 belum ada. Akan dibangun dengan Filament di Tahap B.
 
 ### Tahap A — Backend Laravel inti
 
-**Status:** ⏳ belum. `backend/` belum ada; `API_CONTRACT.md` belum ada.
+**Status:** ✅ selesai (16 Nov 2026). Laravel 13 + Sanctum di `backend/`, 7 tabel §12.2, semua endpoint Tahap A, seeder, 36 feature test lulus, `pint --test` bersih, `migrate:fresh --seed` sukses di MySQL lokal `visionguard`, uji asap `php artisan serve` + curl berhasil. `API_CONTRACT.md` dan semua keputusan di bawah disetujui pengguna.
+
+Keputusan yang diambil (dicatat di DOCS_SPEC §16 #18–#24): Laravel 13 (bukan 11/12), PHPUnit, kolom `password_hash`, `orders.created_at` ditambahkan, hapus akun menganonimkan `orders`/`credit_ledger`/`monitoring_days`, `GET /credits/history` menggantikan `GET /orders`, `GET /stats?range=`, batch `POST /stats/daily`, Saran AI 10/jam/pengguna, test memakai SQLite in-memory.
 
 **Tujuan:** REST API Laravel + Sanctum + MySQL di `./backend` yang memenuhi kontrak §11 dan skema §12.2, belum termasuk pembayaran.
 
@@ -155,10 +157,10 @@ ADM-01, ADM-02, ADM-03 belum ada. Akan dibangun dengan Filament di Tahap B.
 - Saldo **tidak pernah** dikirim dari klien. Tidak ada kolom gambar di tabel mana pun.
 
 **Kriteria selesai:**
-- [ ] `php artisan migrate:fresh --seed` sukses pada MySQL lokal `visionguard`.
-- [ ] Semua endpoint §11.1 (kecuali pembayaran & reset sandi) dan §11.2 yang disetujui berjalan, plus `POST /ai/advice`.
-- [ ] Feature test mencakup minimal: register 201/422, login 200/401/429, logout mencabut token, aktivasi (sudah aktif → tidak memotong; kuota gratis; potong kredit −1 dengan `monitoring_day_id`; 402; ganti bulan mereset kuota; zona waktu akun menentukan tanggal), `GET /credits/status`, upsert `POST /stats/daily` (kirim dua kali → satu baris), `GET /stats?days=7|30`, `DELETE /me` 200/403 + anonimisasi order, ledger tidak bisa di-update/delete, `POST /ai/advice` 200/422/401 (Gemini di-mock dengan `Http::fake`).
-- [ ] `API_CONTRACT.md` lengkap dan disetujui pengguna.
+- [x] `php artisan migrate:fresh --seed` sukses pada MySQL lokal `visionguard`.
+- [x] Semua endpoint §11.1 (kecuali pembayaran & reset sandi) dan §11.2 yang disetujui berjalan, plus `POST /ai/advice`.
+- [x] Feature test mencakup minimal: register 201/422, login 200/401/429, logout mencabut token, aktivasi (sudah aktif → tidak memotong; kuota gratis; potong kredit −1 dengan `monitoring_day_id`; 402; ganti bulan mereset kuota; zona waktu akun menentukan tanggal), `GET /credits/status`, upsert `POST /stats/daily` (kirim dua kali → satu baris), `GET /stats?range=7|30`, `DELETE /me` 200/403 + anonimisasi order, ledger tidak bisa di-update/delete, `POST /ai/advice` 200/422/401 (Gemini di-mock dengan `Http::fake`).
+- [x] `API_CONTRACT.md` lengkap dan disetujui pengguna.
 
 **Cara verifikasi:**
 ```bash
@@ -232,9 +234,9 @@ Buka `http://127.0.0.1:8000/admin`, login sebagai admin, coba A-01..A-03.
 - `lib/features/auth/application/auth_controller.dart` + `lib/app/router.dart` — saat start: token ada → `GET /me` → Dashboard (atau Kalibrasi bila belum ada kalibrasi); 401 → hapus token → Login. Tangani 422 (email terpakai), 401, 429 (tahan 5 menit) dengan pesan yang jelas.
 - `lib/features/auth/presentation/login_page.dart` — form "Lupa kata sandi" yang sungguhan.
 - `lib/features/settings/presentation/settings_page.dart` — hapus akun: input sandi → `DELETE /me` → 403 tampilkan pesan → 200 hapus semua tabel lokal (kalibrasi, sesi, metrik, alerts, ringkasan, settings) + token → Login.
-- `lib/features/credits/data/api_credit_repository.dart` — implementasi `CreditRepository` (`status`, `activateToday` termasuk 402 → `ActivationInsufficient`, `packages`, `orders`, `ledger`) + metode baru `createOrder(packageId)`.
+- `lib/features/credits/data/api_credit_repository.dart` — implementasi `CreditRepository` (`status` → `GET /credits/status`, `activateToday` termasuk 402 → `ActivationInsufficient`, `packages` → `GET /credit-packages`, `orders` & `ledger` → `GET /credits/history`) + metode baru `createOrder(packageId)`.
 - `lib/features/credits/presentation/credits_page.dart` — Beli → `POST /orders` → buka `redirect_url` Snap (tambah `url_launcher`; WebView opsional, **tanyakan pengguna**) → saat kembali ke aplikasi/tombol "Muat ulang status" → `GET /credits/status` + `GET /orders`. Order pending tampil "Menunggu pembayaran".
-- `lib/features/stats/data/api_stats_repository.dart` — `POST /stats/daily` (sertakan `device_id`), `GET /stats?days=`.
+- `lib/features/stats/data/api_stats_repository.dart` — `POST /stats/daily` (batch `{device_id, summaries}`), `GET /stats?range=`. Simpan `device_id` dari respons login/register di penyimpanan aman.
 - Provider `authRepositoryProvider`, `creditRepositoryProvider`, `statsRepositoryProvider`, `aiAdviceRepositoryProvider` — pilih implementasi API bila `ApiConstants.useRemoteApi`.
 - `pubspec.yaml` — bila `useRemoteApi`, jangan bergantung pada `.env` (siapkan langkah menghapus `.env` dari asset untuk build rilis, §17.5).
 - `test/` — test baru untuk repository API memakai Dio dengan adapter tiruan (pola sudah ada di `network_test.dart`), test auto-login, hapus akun, 402.
@@ -390,3 +392,5 @@ Isi satu baris setiap akhir sesi (terbaru di bawah).
 | 2026-11-02 | — | ROADMAP.md dibuat dari audit kode commit `3ba90c3` | — |
 | 2026-11-11 | — | Audit ulang di `aca273a`: `lib/`/`test/` tidak berubah, `backend/` belum ada; kolom status per tahap ditambahkan; AGENTS.md diberi aturan perbarui status tiap akhir tahap | `problems-report.html` hasil build ikut ter-commit — sebaiknya di-untrack oleh pengguna |
 | 2026-11-16 | — | Audit ulang di `aca273a`: `lib/`/`test/` tetap tidak berubah, `backend/`, `API_CONTRACT.md`, `HANDOFF.md` belum ada; `flutter analyze` 0 issue, `flutter test` 127 lulus; status tahap A–F tidak berubah | — |
+| 2026-11-16 | A | Backend Laravel 13 dibuat di `backend/`: migration 7 tabel §12.2, model + relasi, `MonitoringDayService` (§8.2), 12 endpoint `/api`, Gemini proxy + rate limit, seeder, 36 feature test lulus, `API_CONTRACT.md`, `backend/README.md`. `flutter analyze`/`test` tetap bersih | Keputusan §16 #18–#24. Menunggu persetujuan `API_CONTRACT.md`. Skeleton Laravel menambah `backend/CLAUDE.md` & `backend/AGENTS.md` (instruksi Laravel Boost), belum dipasang; hapus atau pasang Boost sesuai keputusan pengguna |
+| 2026-11-16 | A | Pengguna menyetujui `API_CONTRACT.md` & keputusan §16 #18–#24 → Tahap A selesai. `backend/CLAUDE.md` & `backend/AGENTS.md` (Laravel Boost) dihapus | Laravel Boost tidak dipakai; instruksi AI hanya di `AGENTS.md` root |

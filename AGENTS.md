@@ -12,7 +12,7 @@ Instruksi tunggal untuk semua AI coding assistant (Claude Code, OpenCode, Antigr
 
 ## 2. Ringkasan proyek
 
-VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi dini kelelahan mata digital. Kamera dipakai untuk menghitung blink rate, PERCLOS, dan jarak wajah ke layar secara *on-device*, lalu digabung menjadi skor kelelahan 0–100 yang memicu pengingat. Backend (Laravel + MySQL, Midtrans) berada di luar repo ini.
+VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi dini kelelahan mata digital. Kamera dipakai untuk menghitung blink rate, PERCLOS, dan jarak wajah ke layar secara *on-device*, lalu digabung menjadi skor kelelahan 0–100 yang memicu pengingat. Backend Laravel + MySQL ada di folder `backend/` (Tahap A: akun, kredit, statistik, Saran AI; Midtrans & panel admin menyusul di Tahap B).
 
 ## 3. Stack
 
@@ -20,8 +20,8 @@ VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi
 - **State management:** `flutter_riverpod` 2.x
 - **Navigasi:** `go_router` 14
 - **Kamera:** `camera` / `camera_windows`
-- **Backend:** Laravel + Sanctum + MySQL sesuai SRS/SDD (di luar repo ini).
-- **Jaringan:** `dio` (REST JSON ke Laravel) + `flutter_secure_storage` (token Sanctum). Belum terhubung ke server sungguhan.
+- **Backend (`backend/`):** Laravel 13 (PHP ≥ 8.3, Laravel Herd) + Sanctum + MySQL 8 (`DB_DATABASE=visionguard`). Kontrak JSON di `API_CONTRACT.md` (root); aturan bisnis server di `backend/config/visionguard.php`. `backend/.env` (kredensial DB, `GEMINI_API_KEY`) tidak boleh di-commit; contoh di `backend/.env.example`. Panduan: `backend/README.md`.
+- **Jaringan:** `dio` (REST JSON ke Laravel) + `flutter_secure_storage` (token Sanctum). Klien belum terhubung ke backend (Tahap C).
 - **Saran AI (fitur tambahan, DOCS_SPEC §17):** `google_generative_ai` + `flutter_dotenv` (`GEMINI_API_KEY` di `.env`). Pemanggilan langsung dari klien **khusus pengembangan**; versi final wajib lewat backend `POST /ai/advice`.
 - **Database lokal:** SQLite via `drift` + `drift_flutter` (file di folder `getApplicationSupportDirectory` dari `path_provider`), skema persis DOCS_SPEC §12.3. Kode `app_database.g.dart` dihasilkan `drift_dev` + `build_runner`.
 - **Notifikasi pengingat:** `flutter_local_notifications` 22.x (Windows & Android, aksi Tunda). Gagal/tidak didukung/izin ditolak → pop-up dalam aplikasi. Android memakai *core library desugaring* & izin `POST_NOTIFICATIONS`.
@@ -29,7 +29,32 @@ VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi
 - Direncanakan (masih dikomentari di `pubspec.yaml`): `tflite_flutter`
 - **Firebase tidak dipakai** (DOCS_SPEC §16 #13). Jangan menambahkannya kembali tanpa izin.
 
-## 4. Struktur `lib/`
+## 4. Struktur
+
+### 4.1 `backend/` (Laravel)
+
+```
+backend/
+├── app/Http/Controllers/Api/  # AuthController, AccountController, MonitoringDayController,
+│                              # CreditController, StatsController, AiAdviceController
+├── app/Http/Requests/         # Form Request per endpoint (validasi)
+├── app/Http/Resources/        # format JSON (datar, tanpa "data")
+├── app/Http/Middleware/       # ForceJsonResponse (semua /api menjawab JSON)
+├── app/Models/                # User (creditBalance, freeQuotaRemaining), Device, CreditPackage,
+│                              # Order, CreditLedger (append-only), MonitoringDay, DailyStat
+├── app/Services/              # MonitoringDayService (§8.2, DB transaction + lockForUpdate),
+│                              # StatsService, AccountService (hapus/anonimkan), DeviceService,
+│                              # LoginThrottle (5× gagal → 5 menit), GeminiAdviceService
+├── config/visionguard.php     # satu-satunya tempat aturan bisnis server (kuota, lockout, rate limit AI)
+├── database/migrations/       # 7 tabel §12.2 (+ orders.created_at, §16 #18)
+├── database/seeders/          # admin, demo, 3 paket aktif
+├── routes/api.php
+└── tests/Feature/             # Auth, MonitoringDay, Credit, Stats, Account, AiAdvice
+```
+
+Aturan backend: saldo selalu `SUM(credit_ledger.delta)`; ledger tidak pernah di-update/delete (kecuali anonimisasi FK saat hapus akun); tidak ada kolom gambar; hanya angka ringkasan §17.2 yang diteruskan ke Gemini. Instruksi AI hanya ada di `AGENTS.md` root ini; **jangan** menambah `CLAUDE.md`/`AGENTS.md` di `backend/` dan jangan memasang Laravel Boost.
+
+### 4.2 `lib/` (Flutter)
 
 ```
 lib/
@@ -107,6 +132,13 @@ dart run build_runner build   # buat ulang app_database.g.dart setelah mengubah 
 flutter analyze          # analisis statis
 flutter test             # jalankan unit & widget test
 flutter run -d windows   # jalankan aplikasi di Windows
+
+cd backend
+composer install
+php artisan migrate:fresh --seed   # MySQL lokal visionguard
+php artisan serve                  # http://127.0.0.1:8000/api
+php artisan test                   # feature test (SQLite in-memory)
+./vendor/bin/pint --test           # gaya kode PHP
 ```
 
 > Build Windows membutuhkan komponen Visual Studio **"C++ ATL for latest build tools"** (dipakai oleh `flutter_secure_storage_windows`).
@@ -117,6 +149,6 @@ flutter run -d windows   # jalankan aplikasi di Windows
 2. **`lib/cv_engine/` tidak boleh bergantung pada UI** — tidak meng-import `package:flutter/material.dart`, widget, atau modul `features/*/presentation`. UI hanya membaca state lewat Riverpod.
 3. **Frame kamera tidak boleh disimpan atau dikirim ke mana pun** — tidak ke disk, log, cache, database lokal, Gemini, maupun jaringan. Frame berhenti di CV Engine. Database lokal hanya menyimpan angka; jangan menambah kolom BLOB/gambar.
 4. **Konstanta CV** (ambang EAR, PERCLOS, jarak, bobot skor, dll.) **hanya** didefinisikan di `lib/core/constants/cv_constants.dart`; jangan hard-code di tempat lain.
-5. **Setelah mengubah kode**, jalankan `flutter analyze` dan `flutter test` sampai **bersih** (tanpa error, warning, maupun test gagal).
+5. **Setelah mengubah kode**, jalankan `flutter analyze` dan `flutter test` sampai **bersih** (tanpa error, warning, maupun test gagal). Bila mengubah `backend/`, jalankan juga `php artisan test` dan `./vendor/bin/pint --test`.
 6. Patuhi juga panduan kepatuhan di `DOCS_SPEC.md` §15. Untuk Saran AI, patuhi §17: hanya angka ringkasan yang boleh dikirim.
 7. **DILARANG** menjalankan `git commit`, `git push`, `git reset`, `git clean`, atau perintah git lain yang mengubah riwayat/remote. Commit dan push hanya dilakukan oleh pengguna. Jangan pernah menambahkan baris `Co-Authored-By`.
