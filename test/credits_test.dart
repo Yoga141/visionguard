@@ -196,9 +196,50 @@ void main() {
 
       await tester.tap(find.widgetWithText(FilledButton, 'Beli').first);
       await tester.pumpAndSettle();
-      expect(find.text('Pembayaran Midtrans akan tersedia setelah backend siap.'), findsOneWidget);
-      await tester.tap(find.text('Tutup'));
+      expect(find.text('Beli Paket Hemat'), findsOneWidget);
+      expect(find.textContaining('Halaman pembayaran Midtrans'), findsOneWidget);
+      await tester.tap(find.text('Batal'));
       await tester.pumpAndSettle();
+      expect(c.read(creditControllerProvider).pendingOrder, isNull);
+      await tester.pumpWidget(const SizedBox());
+      c.dispose();
+    });
+
+    testWidgets('Beli → order menunggu pembayaran → Muat ulang status → saldo bertambah', (tester) async {
+      final repo = FakeCreditRepository.demo(clock: () => DateTime(2026, 11, 2, 9));
+      final opened = <Uri>[];
+      await tester.binding.setSurfaceSize(const Size(800, 1400));
+      final c = ProviderContainer(overrides: [
+        creditRepositoryProvider.overrideWithValue(repo),
+        urlOpenerProvider.overrideWithValue((uri) async {
+          opened.add(uri);
+          return true;
+        }),
+      ]);
+      await tester.pumpWidget(UncontrolledProviderScope(
+        container: c,
+        child: MaterialApp(theme: AppTheme.light, home: const CreditsPage()),
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(FilledButton, 'Beli').first);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Lanjut bayar'));
+      await tester.pumpAndSettle();
+
+      final pending = c.read(creditControllerProvider).pendingOrder!;
+      expect(pending.status, OrderStatus.pending);
+      expect(find.textContaining('Menunggu pembayaran: Paket Hemat'), findsOneWidget);
+      expect(find.text('Muat ulang status'), findsOneWidget);
+      expect(opened, isEmpty); // repository tiruan tidak punya halaman bayar
+
+      repo.settleDemoOrder(pending.orderCode); // meniru notifikasi Midtrans di server
+      await tester.tap(find.text('Muat ulang status'));
+      await tester.pumpAndSettle();
+
+      expect(c.read(creditControllerProvider).pendingOrder, isNull);
+      expect(c.read(creditControllerProvider).status!.balance, 9); // 4 + 5
+      expect(find.textContaining('Pembayaran berhasil. 5 kredit ditambahkan'), findsOneWidget);
       await tester.pumpWidget(const SizedBox());
       c.dispose();
     });

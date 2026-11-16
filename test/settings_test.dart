@@ -174,12 +174,23 @@ void main() {
       c.dispose();
     });
 
-    testWidgets('Hapus Akun meminta konfirmasi dan memberi catatan backend', (tester) async {
+    testWidgets('Hapus Akun meminta konfirmasi + kata sandi sebelum tombol aktif', (tester) async {
       final c = await pumpPage(tester);
       await tester.tap(find.text('Hapus Akun'));
       await tester.pumpAndSettle();
       expect(find.text('Hapus akun?'), findsOneWidget);
-      expect(find.textContaining('setelah backend tersedia'), findsOneWidget);
+      expect(find.textContaining('termasuk sisa kredit'), findsOneWidget);
+
+      FilledButton confirm() =>
+          tester.widget<FilledButton>(find.descendant(of: find.byType(AlertDialog), matching: find.byType(FilledButton)));
+      expect(confirm().onPressed, isNull);
+      await tester.tap(find.text('Saya mengerti dan ingin menghapus akun'));
+      await tester.pump();
+      expect(confirm().onPressed, isNull); // kata sandi belum diisi
+      await tester.enterText(find.widgetWithText(TextField, 'Kata sandi'), 'password123');
+      await tester.pump();
+      expect(confirm().onPressed, isNotNull);
+
       await tester.tap(find.text('Batal'));
       await tester.pumpAndSettle();
       expect(find.text('Hapus akun?'), findsNothing);

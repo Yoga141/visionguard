@@ -22,10 +22,13 @@ dependencies:
   # Lapisan jaringan ke REST API Laravel + token Sanctum (SDD 3.2)
   dio: ^5.11.1
   flutter_secure_storage: ^11.2.0
+  # Membuka halaman pembayaran Midtrans Snap di browser (UC-19, KRD-02)
+  url_launcher: ^6.3.3
 
-  # Gemini AI — fitur tambahan "Saran AI" (DOCS_SPEC §17)
+  # Gemini AI — fitur tambahan "Saran AI" (DOCS_SPEC §17). Panggilan langsung
+  # dari klien HANYA untuk debug (key lewat --dart-define=GEMINI_API_KEY);
+  # bawaan lewat backend POST /ai/advice.
   google_generative_ai: ^0.4.6
-  flutter_dotenv: ^6.0.1
 
   # SQLite lokal: kalibrasi, sesi, metrik, pengingat, pengaturan (DOCS_SPEC §12.3)
   drift: ^2.35.3
@@ -51,5 +54,3 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
-  assets:
-    - .env

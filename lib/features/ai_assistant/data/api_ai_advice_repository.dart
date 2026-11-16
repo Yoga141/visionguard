@@ -6,8 +6,7 @@ import 'ai_advice_repository.dart';
 /// Ini jalur **final**: API key Gemini hanya disimpan di server, klien cukup
 /// mengirim angka ringkasan dengan token Sanctum.
 ///
-/// Belum aktif selama `ApiConstants.useRemoteApi == false` dan endpoint belum
-/// disetujui/dibangun.
+/// Bawaan aplikasi (`ApiConstants.useRemoteApi == true`).
 class ApiAiAdviceRepository implements AiAdviceRepository {
   ApiAiAdviceRepository(this._api);
 

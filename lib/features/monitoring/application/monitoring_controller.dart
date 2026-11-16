@@ -14,6 +14,7 @@ import '../../../cv_engine/face_analyzer.dart';
 import '../../../cv_engine/fatigue_scorer.dart';
 import '../../../cv_engine/session_evaluator.dart';
 import '../../calibration/application/calibration_controller.dart';
+import '../../../core/network/api_exception.dart';
 import '../../credits/application/credit_controller.dart';
 import '../../credits/domain/credit_models.dart';
 import '../../reminders/application/reminder_controller.dart';
@@ -239,10 +240,13 @@ class MonitoringController extends Notifier<MonitoringState> {
       activation = await ref.read(creditControllerProvider.notifier).activateToday();
     } catch (e) {
       // Offline & hari belum aktif → Mode Timer (alur alternatif §8.2).
+      // Error lain (mis. 401 sesi berakhir) juga ke Mode Timer, dengan pesan jelas.
       state = state.copyWith(starting: false);
       useTimerMode();
-      state = state.copyWith(
-          message: 'Tidak dapat mengaktifkan Hari Pemantauan AI (offline). Beralih ke Mode Timer.');
+      final reason = e is ApiException && e is! NetworkException
+          ? friendlyErrorMessage(e)
+          : 'Tidak dapat mengaktifkan Hari Pemantauan AI (offline).';
+      state = state.copyWith(message: '$reason Beralih ke Mode Timer.');
       return StartAiOutcome.offlineTimerMode;
     }
     switch (activation) {

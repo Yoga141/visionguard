@@ -98,6 +98,18 @@ class AppDatabase extends _$AppDatabase {
         },
       );
 
+  /// UC-05 Hapus akun: kosongkan semua data lokal (kalibrasi, sesi, metrik,
+  /// pengingat, ringkasan, pengaturan) dalam satu transaksi. Anak dulu
+  /// (`metric_samples`, `alerts`) karena foreign key ke `sessions`.
+  Future<void> wipeAll() => transaction(() async {
+        await delete(metricSamples).go();
+        await delete(alerts).go();
+        await delete(sessions).go();
+        await delete(dailySummaries).go();
+        await delete(calibrations).go();
+        await delete(settings).go();
+      });
+
   static QueryExecutor _openConnection() => driftDatabase(
         name: 'visionguard',
         native: const DriftNativeOptions(databaseDirectory: getApplicationSupportDirectory),

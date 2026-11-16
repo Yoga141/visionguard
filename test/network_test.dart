@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -146,5 +147,112 @@ void main() {
       expect(c.adapter.last!.path, '/auth/logout');
       expect(await c.tokens.read(), isNull);
     });
+
+    test('token gagal disimpan → AuthException jelas, bukan error mentah', () async {
+      final adapter = FakeAdapter(200, {
+        'token': 'tok-1',
+        'user': {'name': 'Ani', 'email': 'ani@x.id'},
+      });
+      final api = ApiClient(
+        tokenStorage: _BrokenStorage(),
+        baseUrl: 'https://test/api',
+        dio: Dio()..httpClientAdapter = adapter,
+        tokenReadTimeout: const Duration(milliseconds: 50),
+      );
+      await expectLater(
+        ApiAuthRepository(api).login('ani@x.id', 'rahasia'),
+        throwsA(isA<AuthException>()
+            .having((e) => e.message, 'message', contains('sesi tidak dapat disimpan'))),
+      );
+    });
+
+    test('respons login tanpa field user lengkap → AuthException', () async {
+      final c = fakeClient(200, {'token': 'tok-1', 'user': {'name': 'Ani'}});
+      await expectLater(
+        ApiAuthRepository(c.api).login('ani@x.id', 'rahasia'),
+        throwsA(isA<AuthException>()
+            .having((e) => e.message, 'message', 'Respons server tidak dikenali.')),
+      );
+      expect(await c.tokens.read(), isNull);
+    });
+
+    test('base URL tidak valid → AuthException berisi petunjuk API_BASE_URL', () async {
+      final api = ApiClient(
+        tokenStorage: InMemoryTokenStorage(),
+        baseUrl: '[http://127.0.0.1:8000/api](http://127.0.0.1:8000/api)',
+      );
+      await expectLater(
+        ApiAuthRepository(api).login('ani@x.id', 'rahasia'),
+        throwsA(isA<AuthException>().having((e) => e.message, 'message', contains('API_BASE_URL'))),
+      );
+    });
   });
+
+  group('ApiClient tahan gangguan', () {
+    test('isValidBaseUrl', () {
+      expect(ApiClient.isValidBaseUrl('http://127.0.0.1:8000/api'), isTrue);
+      expect(ApiClient.isValidBaseUrl('https://api.contoh.id/api'), isTrue);
+      expect(ApiClient.isValidBaseUrl('[http://127.0.0.1:8000/api](http://127.0.0.1:8000/api)'), isFalse);
+      expect(ApiClient.isValidBaseUrl('127.0.0.1:8000/api'), isFalse);
+      expect(ApiClient.isValidBaseUrl(''), isFalse);
+    });
+
+    test('base URL tidak valid: konstruktor tidak melempar, request → NetworkException', () async {
+      late ApiClient api;
+      expect(
+        () => api = ApiClient(tokenStorage: InMemoryTokenStorage(), baseUrl: '[http://x](http://x)'),
+        returnsNormally,
+      );
+      await expectLater(api.post('/auth/login'), throwsA(isA<NetworkException>()));
+    });
+
+    test('baca token melempar → request tetap dikirim tanpa Authorization', () async {
+      final adapter = FakeAdapter(200, {'ok': true});
+      final api = ApiClient(
+        tokenStorage: _BrokenStorage(),
+        baseUrl: 'https://test/api',
+        dio: Dio()..httpClientAdapter = adapter,
+      );
+      await api.get('/credits/status');
+      expect(adapter.last, isNotNull);
+      expect(adapter.last!.headers.containsKey('Authorization'), isFalse);
+    });
+
+    test('baca token menggantung → request tetap dikirim setelah batas waktu', () async {
+      final adapter = FakeAdapter(200, {'ok': true});
+      final api = ApiClient(
+        tokenStorage: _HangingStorage(),
+        baseUrl: 'https://test/api',
+        dio: Dio()..httpClientAdapter = adapter,
+        tokenReadTimeout: const Duration(milliseconds: 50),
+      );
+      final res = await api.get('/credits/status').timeout(const Duration(seconds: 5));
+      expect(res['ok'], isTrue);
+      expect(adapter.last!.headers.containsKey('Authorization'), isFalse);
+    });
+  });
+}
+
+/// Penyimpanan aman yang selalu gagal (mis. Credential Locker/Keystore error).
+class _BrokenStorage implements TokenStorage {
+  @override
+  Future<String?> read() async => throw Exception('secure storage gagal');
+
+  @override
+  Future<void> write(String token) async => throw Exception('secure storage gagal');
+
+  @override
+  Future<void> delete() async => throw Exception('secure storage gagal');
+}
+
+/// Penyimpanan aman yang tidak pernah merespons.
+class _HangingStorage implements TokenStorage {
+  @override
+  Future<String?> read() => Completer<String?>().future;
+
+  @override
+  Future<void> write(String token) => Completer<void>().future;
+
+  @override
+  Future<void> delete() => Completer<void>().future;
 }

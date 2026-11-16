@@ -8,6 +8,7 @@ import '../../monitoring/application/monitoring_controller.dart';
 import '../../monitoring/data/metrics_repository.dart';
 import '../data/demo_data_seeder.dart';
 import '../data/stats_repository.dart';
+import 'sync_service.dart';
 
 /// Satu titik grafik tren; [summary] null bila hari itu tidak ada data.
 class TrendPoint {
@@ -106,19 +107,8 @@ class StatsController extends AsyncNotifier<StatsData> {
       if (key == todayKey) todaySummary = s;
     }
 
-    // 6.2 Sinkronisasi ringkasan yang belum terkirim (STK-03).
-    var synced = true;
-    try {
-      final pending = await _metrics.pendingSync();
-      if (pending.isNotEmpty) {
-        await _server.uploadDaily(pending);
-        for (final p in pending) {
-          await _metrics.markSynced(p.day);
-        }
-      }
-    } catch (e) {
-      synced = false;
-    }
+    // 6.2 Sinkronisasi ringkasan yang belum terkirim (STK-03, SyncService).
+    var synced = await ref.read(syncServiceProvider).syncPending();
 
     // 6.4 Tren dari server; offline → data lokal.
     List<DailySummary> rows;

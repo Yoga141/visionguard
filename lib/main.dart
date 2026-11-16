@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
@@ -13,17 +12,14 @@ import 'features/settings/application/settings_controller.dart';
 ///
 /// Urutan inisialisasi:
 /// 1. [WidgetsFlutterBinding] — agar binding Flutter siap.
-/// 2. [dotenv.load] — memuat `.env` (GEMINI_API_KEY untuk fitur Saran AI,
-///    khusus pengembangan; lihat DOCS_SPEC §17).
-/// 3. Database lokal (DOCS_SPEC §12.3) — memuat pengaturan & kalibrasi
+/// 2. Database lokal (DOCS_SPEC §12.3) — memuat pengaturan & kalibrasi
 ///    tersimpan, menutup sesi yang tertinggal terbuka, dan menghapus metrik
 ///    > 30 hari, lalu menyiapkan notifikasi sistem pengingat.
-/// 4. [runApp] — menjalankan aplikasi di dalam [UncontrolledProviderScope]
-///    agar semua provider Riverpod dapat diakses dari mana saja.
+/// 3. [runApp] — menjalankan aplikasi di dalam [UncontrolledProviderScope]
+///    agar semua provider Riverpod dapat diakses dari mana saja. Layar pertama
+///    (splash) mencoba auto-login dari token tersimpan (`GET /me`).
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  await dotenv.load(fileName: ".env");
 
   final container = ProviderContainer();
   await prepareLocalData(container);

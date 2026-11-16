@@ -142,3 +142,29 @@ class ActivationSuccess extends ActivationResult {
 class ActivationInsufficient extends ActivationResult {
   const ActivationInsufficient(super.status);
 }
+
+/// Respons `POST /orders` (UC-19): order `pending` + halaman bayar Snap.
+class CheckoutSession {
+  const CheckoutSession({
+    required this.orderCode,
+    required this.redirectUrl,
+    required this.paymentMode,
+    required this.order,
+  });
+
+  final String orderCode;
+
+  /// Halaman pembayaran Midtrans Snap (atau simulasi server); dibuka di browser.
+  final String redirectUrl;
+
+  /// `midtrans` | `simulation` | `fake` (repository tiruan, tanpa halaman bayar).
+  final String paymentMode;
+  final CreditOrder order;
+}
+
+/// Respons `GET /orders/{order_code}`: status terbaru + saldo.
+class OrderCheck {
+  const OrderCheck({required this.order, required this.balance});
+  final CreditOrder order;
+  final int balance;
+}

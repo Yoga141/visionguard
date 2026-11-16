@@ -1,12 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants/api_constants.dart';
 import '../../../core/constants/business_constants.dart';
 import '../../../core/database/database_providers.dart';
+import '../../../core/network/api_client.dart';
+import '../../auth/data/session_store.dart';
 import '../domain/credit_models.dart';
+import 'api_credit_repository.dart';
 
 /// Kontrak Kredit & Pembayaran (CreditService, SDD 4.1). Implementasi asli
-/// memanggil `GET /credits/status`, `POST /monitoring-days/activate`,
-/// `GET /credit-packages`, `GET /orders`, `GET /credits/history` (§11).
+/// ([ApiCreditRepository]) memanggil `GET /credits/status`,
+/// `POST /monitoring-days/activate`, `GET /credit-packages`,
+/// `GET /credits/history`, `POST /orders`, `GET /orders/{order_code}`.
 abstract class CreditRepository {
   /// UC-18: sisa kuota gratis, saldo, status Hari Pemantauan AI hari ini.
   Future<CreditStatus> status();
@@ -22,14 +27,23 @@ abstract class CreditRepository {
 
   /// UC-20: mutasi kredit (pembelian, pemakaian, penyesuaian), terbaru dulu.
   Future<List<LedgerEntry>> ledger();
+
+  /// UC-19: buat order `pending` untuk paket aktif + halaman bayar Snap.
+  Future<CheckoutSession> createOrder(int packageId);
+
+  /// "Muat ulang status" order (server juga mengecek Status API Midtrans).
+  Future<OrderCheck> orderStatus(String orderCode);
 }
 
 /// Sumber tanggal "sekarang" (bisa diganti di test).
 final creditClockProvider = Provider<DateTime Function()>((ref) => DateTime.now);
 
-/// Default: repository tiruan sampai backend Laravel siap.
-final creditRepositoryProvider = Provider<CreditRepository>(
-    (ref) => FakeCreditRepository.demo(clock: ref.watch(creditClockProvider)));
+/// Backend asli (bawaan) atau tiruan (`USE_REMOTE_API=false` & test).
+final creditRepositoryProvider = Provider<CreditRepository>((ref) {
+  if (!ApiConstants.useRemoteApi) return FakeCreditRepository.demo(clock: ref.watch(creditClockProvider));
+  final session = ref.watch(sessionStoreProvider);
+  return ApiCreditRepository(ref.watch(apiClientProvider), deviceId: session.deviceId);
+});
 
 /// Meniru `MonitoringDayController` & `User::creditBalance()` di server
 /// (DOCS_SPEC §8.2, §8.3) dengan data di memori.
@@ -141,6 +155,36 @@ class FakeCreditRepository implements CreditRepository {
   @override
   Future<List<LedgerEntry>> ledger() async => _ledger.reversed.toList();
 
+  @override
+  Future<CheckoutSession> createOrder(int packageId) async {
+    final p = demoPackages.firstWhere((p) => p.id == packageId && p.isActive,
+        orElse: () => throw StateError('Paket kredit tidak tersedia.'));
+    final order = _addOrder(p, OrderStatus.pending, _clock());
+    return CheckoutSession(orderCode: order.orderCode, redirectUrl: '', paymentMode: 'fake', order: order);
+  }
+
+  @override
+  Future<OrderCheck> orderStatus(String orderCode) async =>
+      OrderCheck(order: _orders.firstWhere((o) => o.orderCode == orderCode), balance: _balance);
+
+  /// Hanya demo/test: meniru notifikasi `settlement` Midtrans (+kredit paket).
+  void settleDemoOrder(String orderCode) {
+    final i = _orders.indexWhere((o) => o.orderCode == orderCode);
+    final o = _orders[i];
+    _orders[i] = CreditOrder(
+      id: o.id,
+      orderCode: o.orderCode,
+      packageName: o.packageName,
+      credits: o.credits,
+      amountIdr: o.amountIdr,
+      status: OrderStatus.settlement,
+      createdAt: o.createdAt,
+      paymentType: 'simulation',
+      paidAt: _clock(),
+    );
+    _addLedger(o.credits, LedgerReason.purchase, _clock(), orderId: o.id);
+  }
+
   /// Hanya demo/debug: meniru penyesuaian kredit admin (§8.5, reason adjustment).
   void addDemoCredit(int delta, {String note = 'Kredit demo (debug)'}) =>
       _addLedger(delta, LedgerReason.adjustment, _clock(), note: note);
@@ -164,9 +208,9 @@ class FakeCreditRepository implements CreditRepository {
     ));
   }
 
-  void _addOrder(CreditPackage p, OrderStatus status, DateTime at, {String? paymentType}) {
+  CreditOrder _addOrder(CreditPackage p, OrderStatus status, DateTime at, {String? paymentType}) {
     final id = _orders.length + 1;
-    _orders.add(CreditOrder(
+    final order = CreditOrder(
       id: id,
       orderCode: 'VG-${at.year}${at.month.toString().padLeft(2, '0')}-${id.toString().padLeft(4, '0')}',
       packageName: p.name,
@@ -176,6 +220,8 @@ class FakeCreditRepository implements CreditRepository {
       createdAt: at,
       paymentType: paymentType,
       paidAt: status == OrderStatus.settlement ? at : null,
-    ));
+    );
+    _orders.add(order);
+    return order;
   }
 }

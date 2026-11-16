@@ -4,31 +4,30 @@ Aplikasi Flutter berbasis *computer vision* untuk deteksi dini dan pencegahan ke
 
 Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard v1.0.
 
-## Status: Progress 50%
+## Status: Tahap A–C (aplikasi tersambung ke backend)
 
-Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel sudah ada di `backend/`
-(Tahap A–B, lihat `backend/README.md` dan `API_CONTRACT.md`), tetapi aplikasi **belum** terhubung
-(Tahap C), sehingga fitur yang butuh server masih memakai repository **tiruan** (fake). Status di
-tabel ini menilai sisi aplikasi. Server sudah punya Midtrans Snap (+ mode simulasi), panel admin Filament, dan reset kata sandi.
+Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel ada di `backend/` (lihat
+`backend/README.md` dan `API_CONTRACT.md`) dan aplikasi memakainya **secara bawaan** sejak Tahap C.
+Repository tiruan hanya untuk test dan `--dart-define=USE_REMOTE_API=false`. Detail tahap: `ROADMAP.md`.
 
 | ID | Kebutuhan (DOCS_SPEC §5) | Status | Catatan |
 |---|---|---|---|
-| AKN-01 | Daftar dengan nama, email, kata sandi | 🟡 sebagian | Form & validasi selesai; `FakeAuthRepository`, klien REST `ApiAuthRepository` siap |
-| AKN-02 | Login & logout | 🟡 sebagian | Pengguna: selesai (repository tiruan); admin (Filament) di luar repo ini |
-| AKN-03 | Reset kata sandi via email | 🟡 sebagian | Server: email + halaman web sandi baru selesai; tombol di aplikasi belum memanggil API (Tahap C) |
-| AKN-04 | Hapus akun | 🟡 sebagian | Konfirmasi di Pengaturan; penghapusan permanen setelah backend |
+| AKN-01 | Daftar dengan nama, email, kata sandi | ✅ selesai | `POST /auth/register`; 422 email terpakai ditampilkan per kolom |
+| AKN-02 | Login & logout | ✅ selesai | Token di secure storage, auto-login (`GET /me`), logout mencabut token; admin lewat Filament `/admin` |
+| AKN-03 | Reset kata sandi via email | ✅ selesai | Halaman "Lupa kata sandi" → `POST /auth/forgot-password` → tautan ke halaman web sandi baru |
+| AKN-04 | Hapus akun | ✅ selesai | Kata sandi → `DELETE /me` (403 bila salah) → semua data lokal dihapus → Login |
 | KLB-01 | Penjelasan privasi & izin kamera | ✅ selesai | S-02, penafian medis |
 | KLB-02 | Kalibrasi mata 10 detik (baseline EAR) | ✅ selesai | Median 10 dtk |
 | KLB-03 | Focal length pada jarak acuan | ✅ selesai | + opsi lewati (FOV 60°) |
 | KLB-04 | Kalibrasi ulang & per kamera | ✅ selesai | `calibrations.camera_id` |
-| PMT-01 | Aktivasi Hari Pemantauan AI (kuota gratis / 1 kredit) | 🟡 sebagian | Algoritma §8.2 di `FakeCreditRepository`; endpoint server belum |
+| PMT-01 | Aktivasi Hari Pemantauan AI (kuota gratis / 1 kredit) | ✅ selesai | `POST /monitoring-days/activate` (§8.2 di server); 402 → tawarkan Beli atau Mode Timer |
 | PMT-02 | Deteksi kedipan & BR real-time | 🟡 sebagian | Rumus & pipeline selesai; landmark masih `DummyFaceAnalyzer` (MediaPipe belum) |
 | PMT-03 | Estimasi jarak real-time | 🟡 sebagian | Median iris 1 dtk selesai; landmark masih simulasi |
 | PMT-04 | PERCLOS & skor tiap 10 detik | 🟡 sebagian | Selesai di CV Engine; menunggu MediaPipe |
 | PMT-05 | Jeda saat wajah hilang > 10 detik | ✅ selesai | `SessionEvaluator` |
 | PMT-06 | Latar belakang (tray / foreground service) | ⏳ belum | |
 | PMT-07 | Sesi Cek Mata 2 menit (mobile) | ⏳ belum | |
-| PMT-08 | Beralih ke Mode Timer | 🟡 sebagian | Saat offline & hari belum aktif / pilihan saat kredit habis; deteksi kamera dipakai app lain belum |
+| PMT-08 | Beralih ke Mode Timer | 🟡 sebagian | Offline/error aktivasi & pilihan saat kredit habis; deteksi kamera dipakai app lain belum |
 | PNG-01 | Pengingat kedip | ✅ selesai | BR < 10 selama 3 mnt, cooldown 10 mnt |
 | PNG-02 | Pengingat jarak | ✅ selesai | < 50/30 cm selama 10 dtk, cooldown 5 mnt |
 | PNG-03 | Pengingat istirahat | ✅ selesai | Skor ≥ 60, cooldown 20 mnt |
@@ -38,11 +37,11 @@ tabel ini menilai sisi aplikasi. Server sudah punya Midtrans Snap (+ mode simula
 | PNG-07 | Cooldown per jenis | ✅ selesai | |
 | STK-01 | Ringkasan harian | ✅ selesai | S-08 tab "Hari Ini": durasi, rata-rata BR/jarak/skor, pengingat, kepatuhan istirahat |
 | STK-02 | Grafik tren 7 & 30 hari | ✅ selesai | `fl_chart`; "data belum cukup" bila < 2 hari |
-| STK-03 | Sinkron ringkasan ke server | 🟡 sebagian | `daily_summaries.synced` + `FakeStatsRepository`; `POST /stats/daily` belum |
-| KRD-01 | Kuota gratis, saldo, status hari ini | 🟡 sebagian | S-09 & Dashboard selesai; data dari `FakeCreditRepository` |
-| KRD-02 | Beli paket via Midtrans | 🟡 sebagian | Server: `POST /orders` + Snap selesai; aplikasi masih dialog "setelah backend siap" (Tahap C) |
-| KRD-03 | Kredit bertambah setelah pembayaran | 🟡 sebagian | Server: notifikasi bersignature + idempoten selesai; uji Sandbox manual belum |
-| KRD-04 | Riwayat transaksi & pemakaian | 🟡 sebagian | UI selesai; data tiruan |
+| STK-03 | Sinkron ringkasan ke server | ✅ selesai | `SyncService` → `POST /stats/daily` (batch); tren `GET /stats`; offline → data lokal |
+| KRD-01 | Kuota gratis, saldo, status hari ini | ✅ selesai | `GET /credits/status` (saldo dari ledger server) |
+| KRD-02 | Beli paket via Midtrans | 🟡 sebagian | `POST /orders` → halaman Snap di browser → "Muat ulang status"; uji Sandbox manual belum |
+| KRD-03 | Kredit bertambah setelah pembayaran | 🟡 sebagian | Server: notifikasi bersignature + idempoten; teruji otomatis & mode simulasi, Sandbox manual belum |
+| KRD-04 | Riwayat transaksi & pemakaian | ✅ selesai | `GET /credits/history` |
 | PGT-01 | Sensitivitas, jenis pengingat, interval | ✅ selesai | τ 0,65/0,70/0,75; interval 10–60 mnt |
 | PGT-02 | Autostart | ⏳ belum | Tampil "segera hadir" |
 | ADM-01 | Admin kelola paket kredit | ✅ selesai | Filament `/admin` → Paket Kredit (paket pernah dibeli tidak bisa dihapus) |
@@ -50,22 +49,42 @@ tabel ini menilai sisi aplikasi. Server sudah punya Midtrans Snap (+ mode simula
 | ADM-03 | Admin sesuaikan kredit + alasan | ✅ selesai | Aksi "Sesuaikan kredit" (alasan wajib, saldo akhir ≥ 0) |
 
 Fitur tambahan: **Saran AI** (§17) — kartu "Minta saran" di Dashboard (saat Mode AI) dan
-Statistik; hanya angka ringkasan yang dikirim, saran statis bila key kosong/gagal. Panggilan
-Gemini langsung **khusus pengembangan**.
+Statistik; lewat backend `POST /ai/advice` (key Gemini hanya di server), hanya angka ringkasan
+yang dikirim, saran statis bila gagal/429/offline. `.env` tidak lagi menjadi asset aplikasi.
 
 Opsi debug (hanya `kDebugMode` / analyzer simulasi): "Isi data contoh 14 hari" di Statistik,
 "Tambah 1 kredit" di Kredit, simulasi mata lelah/terlalu dekat, percepat 20-20-20.
 
 ## Menjalankan
 
-```bash
-flutter pub get
-flutter run            # pilih device: android / windows / chrome / dll
-flutter analyze        # analisis statis
-flutter test           # unit & widget test
-```
+1. Jalankan backend (sekali setup: lihat `backend/README.md`):
+   ```bash
+   cd backend
+   php artisan migrate:fresh --seed   # sekali / bila ingin data awal bersih
+   php artisan serve                  # http://127.0.0.1:8000
+   ```
+2. Jalankan aplikasi:
+   ```bash
+   flutter pub get
+   flutter run -d windows             # bawaan: http://127.0.0.1:8000/api
+   flutter run -d emulator-5554       # emulator Android: http://10.0.2.2:8000/api
+   # HP fisik (satu Wi-Fi): php artisan serve --host=0.0.0.0, lalu
+   flutter run -d <id-hp> --dart-define=API_BASE_URL=http://<IP-laptop>:8000/api
+   # Tanpa server (repository tiruan):
+   flutter run -d windows --dart-define=USE_REMOTE_API=false
+   ```
+   Ketik URL apa adanya, **tanpa** tanda kurung/format tautan.
+3. Pemeriksaan:
+   ```bash
+   flutter analyze        # analisis statis
+   flutter test           # unit & widget test (selalu memakai repository tiruan / HTTP tiruan)
+   ```
 
-Akun demo: `demo@visionguard.id` / `password123`
+Akun demo (seeder backend, juga terisi otomatis di form login build debug):
+`demo@visionguard.id` / `password123`. Admin: `admin@visionguard.id` / `password123` di `http://127.0.0.1:8000/admin`.
+
+Saran AI langsung ke Gemini tanpa server (debug saja):
+`flutter run -d windows --dart-define=USE_REMOTE_API=false --dart-define=GEMINI_API_KEY=<key>`.
 
 ## Struktur Folder
 
@@ -83,16 +102,16 @@ lib/
 │   ├── fatigue_scorer.dart           # skor 0-100 & level
 │   └── cv_providers.dart             # provider Riverpod CV Engine
 ├── features/
-│   ├── auth/         (data, application, presentation)
+│   ├── auth/         (data, application, presentation) — login, auto-login, lupa sandi, hapus akun
 │   ├── onboarding/   (presentation)
 │   ├── calibration/  (application, presentation)
 │   ├── ai_assistant/ (data, application, presentation) — Saran AI (§17)
 │   ├── calibration/  (data, application, presentation)
-│   ├── credits/      (domain, data, application, presentation) — CreditRepository tiruan, S-09
+│   ├── credits/      (domain, data, application, presentation) — ApiCreditRepository (+ tiruan), beli via Midtrans, S-09
 │   ├── monitoring/   (data, application, presentation)
 │   ├── reminders/    (domain, application, data, presentation) — RuleEngine, TimerService, pop-up
 │   ├── settings/     (data, application, presentation)
-│   └── stats/        (data, application, presentation) — agregasi, sinkron tiruan, grafik S-08
+│   └── stats/        (data, application, presentation) — agregasi, SyncService → POST /stats/daily, grafik S-08
 └── shared/widgets/                   # widget bersama (badge kamera aktif)
 test/
 ├── cv_engine_test.dart               # uji rumus EAR, jarak, skor

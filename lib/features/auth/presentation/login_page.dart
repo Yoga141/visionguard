@@ -1,10 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../app/router.dart';
-import '../../calibration/application/calibration_controller.dart';
 import '../application/auth_controller.dart';
+import 'post_login.dart';
 
 /// S-01 Login dan Registrasi (UC-01, UC-02).
 class LoginPage extends ConsumerStatefulWidget {
@@ -17,8 +18,9 @@ class LoginPage extends ConsumerStatefulWidget {
 class _LoginPageState extends ConsumerState<LoginPage> {
   final _formKey = GlobalKey<FormState>();
   final _name = TextEditingController();
-  final _email = TextEditingController(text: 'demo@visionguard.id');
-  final _password = TextEditingController(text: 'password123');
+  // Akun demo (seeder backend) hanya diisi otomatis pada build debug.
+  final _email = TextEditingController(text: kDebugMode ? 'demo@visionguard.id' : '');
+  final _password = TextEditingController(text: kDebugMode ? 'password123' : '');
   bool _registerMode = false;
   bool _obscure = true;
 
@@ -37,17 +39,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ? await auth.register(_name.text, _email.text, _password.text)
         : await auth.login(_email.text, _password.text);
     if (!ok || !mounted) return;
-
-    // UC-02 langkah 5: belum setuju privasi → onboarding; belum kalibrasi → kalibrasi.
-    final state = ref.read(authControllerProvider);
-    final calibrated = ref.read(calibrationControllerProvider).isComplete;
-    if (!state.privacyAccepted) {
-      context.go(Routes.onboarding);
-    } else if (!calibrated) {
-      context.go(Routes.calibration);
-    } else {
-      context.go(Routes.dashboard);
-    }
+    goAfterSignIn(context, ref);
   }
 
   String? _validateEmail(String? v) {
@@ -129,11 +121,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Reset kata sandi via email akan tersedia setelah backend siap.'),
-                            ),
-                          ),
+                          onPressed: () => context.go(Uri(
+                            path: Routes.forgotPassword,
+                            queryParameters: {
+                              if (_email.text.trim().isNotEmpty) 'email': _email.text.trim(),
+                            },
+                          ).toString()),
                           child: const Text('Lupa kata sandi?'),
                         ),
                       )

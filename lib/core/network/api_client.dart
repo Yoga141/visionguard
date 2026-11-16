@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../constants/api_constants.dart';
@@ -16,12 +17,18 @@ export 'api_exception.dart';
 class ApiClient {
   ApiClient({
     required TokenStorage tokenStorage,
-    String baseUrl = ApiConstants.baseUrl,
+    String? baseUrl,
     Dio? dio,
-  })  : _tokenStorage = tokenStorage,
-        _dio = dio ?? Dio() {
+    Duration tokenReadTimeout = ApiConstants.tokenStorageTimeout,
+  }) : this._(tokenStorage, baseUrl ?? ApiConstants.baseUrl, dio ?? Dio(), tokenReadTimeout);
+
+  ApiClient._(this._tokenStorage, String baseUrl, this._dio, this._tokenReadTimeout)
+      : _invalidBaseUrl = isValidBaseUrl(baseUrl) ? null : baseUrl {
+    // Base URL salah (mis. "[http://...](http://...)" hasil salin dari chat)
+    // tidak boleh membuat konstruktor melempar: error ditunda ke request
+    // pertama sebagai NetworkException yang jelas.
+    if (_invalidBaseUrl == null) _dio.options.baseUrl = baseUrl;
     _dio.options
-      ..baseUrl = baseUrl
       ..connectTimeout = ApiConstants.connectTimeout
       ..receiveTimeout = ApiConstants.receiveTimeout
       ..responseType = ResponseType.json
@@ -34,14 +41,33 @@ class ApiClient {
 
   final Dio _dio;
   final TokenStorage _tokenStorage;
+  final Duration _tokenReadTimeout;
+  final String? _invalidBaseUrl;
 
   TokenStorage get tokenStorage => _tokenStorage;
 
+  /// Base URL harus absolut `http(s)://host[:port]/...`.
+  static bool isValidBaseUrl(String url) {
+    final uri = Uri.tryParse(url.trim());
+    return uri != null &&
+        (uri.scheme == 'http' || uri.scheme == 'https') &&
+        uri.host.isNotEmpty;
+  }
+
+  /// Token dibaca dengan batas waktu. Bila penyimpanan aman gagal atau tidak
+  /// merespons, request tetap dikirim tanpa token (server menjawab 401 bila
+  /// perlu), sehingga [RequestInterceptorHandler.next] selalu terpanggil dan
+  /// request tidak pernah menggantung.
   Future<void> _attachToken(
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    final token = await _tokenStorage.read();
+    String? token;
+    try {
+      token = await _tokenStorage.read().timeout(_tokenReadTimeout);
+    } catch (e) {
+      debugPrint('ApiClient: token tidak dapat dibaca (${e.runtimeType}); request dikirim tanpa token.');
+    }
     if (token != null && token.isNotEmpty) {
       options.headers['Authorization'] = 'Bearer $token';
     }
@@ -58,6 +84,13 @@ class ApiClient {
       _send(() => _dio.delete<Object?>(path, data: body));
 
   Future<Map<String, dynamic>> _send(Future<Response<Object?>> Function() request) async {
+    final invalid = _invalidBaseUrl;
+    if (invalid != null) {
+      throw NetworkException(
+        'Alamat server tidak valid: "$invalid". '
+        'Isi API_BASE_URL tanpa tanda kurung, mis. http://127.0.0.1:8000/api',
+      );
+    }
     try {
       final res = await request();
       final data = res.data;
@@ -65,6 +98,11 @@ class ApiClient {
       return <String, dynamic>{'data': data};
     } on DioException catch (e) {
       throw mapDioException(e);
+    } on Exception catch (e) {
+      // Kegagalan lain di luar Dio tetap menjadi ApiException agar lapisan
+      // repository/UI bisa menampilkan pesan, bukan menggantung.
+      debugPrint('ApiClient: kegagalan tak terduga (${e.runtimeType}).');
+      throw const ApiException('Terjadi kesalahan saat menghubungi server. Coba lagi.');
     }
   }
 

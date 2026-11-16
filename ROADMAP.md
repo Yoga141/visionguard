@@ -11,7 +11,7 @@ Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` + `backend/` Ta
 |---|---|---|
 | [x] **A** | Backend Laravel inti (`./backend`, MySQL, Sanctum, endpoint §11, `POST /ai/advice`) | ✅ selesai — 36 feature test lulus; `API_CONTRACT.md` disetujui pengguna (16 Nov 2026) |
 | [ ] **B** | Midtrans Sandbox, panel admin Filament, reset kata sandi via email | 🟡 sebagian — kode + 79 feature test selesai; tinggal uji manual Sandbox dengan key milik pengguna |
-| [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — fondasi klien ada (`ApiClient`, `TokenStorage`, `ApiAuthRepository`, `ApiAiAdviceRepository`, flag `useRemoteApi`); repository API kredit/statistik, auto-login, lupa sandi, hapus akun belum |
+| [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — kode selesai, 167 test lulus, E2E API ke backend lokal lulus; tinggal uji manual UI (Windows) & beli paket di Sandbox |
 | [ ] **D** | Deteksi wajah asli (MediaPipe) | ⏳ belum — antarmuka `FaceAnalyzer` + `DummyFaceAnalyzer` siap; `tflite_flutter` masih dikomentari |
 | [ ] **E** | Latar belakang/system tray, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ | ⏳ belum |
 | [ ] **F** | Finalisasi + `HANDOFF.md` | ⏳ belum |
@@ -225,9 +225,11 @@ Buka `http://127.0.0.1:8000/admin`, login sebagai admin, coba A-01..A-03.
 
 ### Tahap C — Integrasi Flutter ke backend
 
-**Status:** 🟡 sebagian (fondasi saja). Sudah ada: `ApiClient` (Dio + interceptor token), `ApiException`, `TokenStorage`, `ApiAuthRepository` (register/login/logout), `ApiAiAdviceRepository`, flag `ApiConstants.useRemoteApi`, test `network_test.dart`. Belum: `restoreSession`, `forgotPassword`, `deleteAccount` di kontrak auth; `api_credit_repository.dart`; `api_stats_repository.dart`; alur beli Midtrans. Tidak bisa diuji end-to-end sebelum Tahap A–B.
+**Status:** 🟡 sebagian (16 Nov 2026). Kode selesai: `useRemoteApi` bawaan `true` (tiruan di bawah `flutter test` atau `--dart-define=USE_REMOTE_API=false`), base URL per platform, auto-login (splash → `GET /me`, offline → profil tersimpan), lupa sandi (UC-03), hapus akun (UC-05 + hapus data lokal), `ApiCreditRepository` (status, aktivasi + 402, paket, riwayat, `POST /orders`, `GET /orders/{code}`), alur beli `url_launcher` + kartu "Menunggu pembayaran" + "Muat ulang status" (+ cek otomatis saat kembali ke aplikasi), `ApiStatsRepository` + `SyncService`, Saran AI lewat `POST /ai/advice` (Gemini langsung hanya debug, `.env` & `flutter_dotenv` dihapus), pesan error ramah (`friendlyErrorMessage`). `flutter analyze` 0 issue, `flutter test` 167 lulus. E2E API ke backend lokal (mode simulasi) lulus: daftar, `GET /me`, aktivasi (tidak terpotong 2×), paket, order, status order, riwayat, upload & tren statistik, Saran AI (fallback statis), lupa sandi, hapus akun (403 lalu 200). **Tinggal:** uji manual UI di Windows (langkah di README) dan beli paket di Midtrans Sandbox (butuh key pengguna).
 
-**Tujuan:** aplikasi memakai backend asli bila `USE_REMOTE_API=true`; repository tiruan tetap dipakai untuk test dan mode tanpa server.
+Keputusan (DOCS_SPEC §16 #29): persetujuan privasi & profil terakhir disimpan di `settings` lokal (`privacy_accepted:<email>`, `auth.cached_user`, `auth.device_id`); halaman bayar dibuka di browser eksternal (tanpa WebView); tautan reset = halaman web (bukan deep link).
+
+**Tujuan:** aplikasi memakai backend asli secara bawaan; repository tiruan tetap dipakai untuk test dan `USE_REMOTE_API=false`.
 
 **ID kebutuhan:** AKN-01..04, PMT-01, PMT-08 (offline), STK-03, KRD-01..04, Saran AI §17.3 (versi final), KMN-01, PRV-02.
 
@@ -244,21 +246,23 @@ Buka `http://127.0.0.1:8000/admin`, login sebagai admin, coba A-01..A-03.
 - `test/` — test baru untuk repository API memakai Dio dengan adapter tiruan (pola sudah ada di `network_test.dart`), test auto-login, hapus akun, 402.
 
 **Kriteria selesai:**
-- [ ] Dengan backend Tahap A–B berjalan: daftar → onboarding → kalibrasi → mulai Mode AI memotong kuota/kredit di server; tutup & buka aplikasi → langsung masuk (auto-login).
-- [ ] Beli paket di Sandbox → saldo di S-09 bertambah setelah muat ulang.
-- [ ] Statistik tersinkron (`daily_summaries.synced = 1`, baris muncul di `daily_stats`); offline → data lokal dan dikirim ulang saat online.
-- [ ] Saran AI lewat `POST /ai/advice`; gagal → saran statis.
-- [ ] Lupa sandi dan hapus akun berjalan sesuai §8.7.
-- [ ] Tanpa `--dart-define`, aplikasi tetap berjalan dengan repository tiruan; semua test lama tetap lulus.
+- [ ] Dengan backend Tahap A–B berjalan: daftar → onboarding → kalibrasi → mulai Mode AI memotong kuota/kredit di server; tutup & buka aplikasi → langsung masuk (auto-login). *(Lulus di tingkat API (E2E); uji manual UI oleh pengguna.)*
+- [ ] Beli paket di Sandbox → saldo di S-09 bertambah setelah muat ulang. *(Butuh key Midtrans pengguna; alur teruji dengan repository tiruan & mode simulasi.)*
+- [x] Statistik tersinkron (`daily_summaries.synced = 1`, baris muncul di `daily_stats`); offline → data lokal dan dikirim ulang saat online.
+- [x] Saran AI lewat `POST /ai/advice`; gagal → saran statis.
+- [x] Lupa sandi dan hapus akun berjalan sesuai §8.7.
+- [x] `--dart-define=USE_REMOTE_API=false` → repository tiruan; di bawah `flutter test` selalu tiruan; semua test lama tetap lulus.
 
 **Cara verifikasi:**
 ```bash
 flutter analyze
 flutter test
-# backend jalan di http://127.0.0.1:8000 (emulator Android: http://10.0.2.2:8000)
-flutter run -d windows --dart-define=USE_REMOTE_API=true --dart-define=API_BASE_URL=http://127.0.0.1:8000/api
+# backend jalan di http://127.0.0.1:8000 (cd backend && php artisan serve)
+flutter run -d windows                      # bawaan: http://127.0.0.1:8000/api
+flutter run -d emulator-5554                # bawaan Android: http://10.0.2.2:8000/api
+flutter run -d <hp> --dart-define=API_BASE_URL=http://<IP-laptop>:8000/api   # HP fisik (serve --host=0.0.0.0)
 ```
-Catatan: build pengembangan ke `http://` lokal butuh izin cleartext Android (`network_security_config` khusus debug). Rilis wajib HTTPS (KMN-01).
+Catatan: izin cleartext Android untuk `http://` lokal **sudah dipasang** (16 Nov 2026) khusus build debug & profile (`android/app/src/{debug,profile}/res/xml/network_security_config.xml`); `INTERNET` kini juga di manifest `main`. Rilis tetap HTTPS saja (KMN-01). Penanganan error login (`AuthController` menangkap semua error + batas waktu, `ApiClient` memvalidasi `API_BASE_URL` & batas waktu baca token) juga sudah diperbaiki sebelum Tahap C.
 
 ---
 
@@ -397,3 +401,5 @@ Isi satu baris setiap akhir sesi (terbaru di bawah).
 | 2026-11-16 | A | Backend Laravel 13 dibuat di `backend/`: migration 7 tabel §12.2, model + relasi, `MonitoringDayService` (§8.2), 12 endpoint `/api`, Gemini proxy + rate limit, seeder, 36 feature test lulus, `API_CONTRACT.md`, `backend/README.md`. `flutter analyze`/`test` tetap bersih | Keputusan §16 #18–#24. Menunggu persetujuan `API_CONTRACT.md`. Skeleton Laravel menambah `backend/CLAUDE.md` & `backend/AGENTS.md` (instruksi Laravel Boost), belum dipasang; hapus atau pasang Boost sesuai keputusan pengguna |
 | 2026-11-16 | A | Pengguna menyetujui `API_CONTRACT.md` & keputusan §16 #18–#24 → Tahap A selesai. `backend/CLAUDE.md` & `backend/AGENTS.md` (Laravel Boost) dihapus | Laravel Boost tidak dipakai; instruksi AI hanya di `AGENTS.md` root |
 | 2026-11-16 | B | Midtrans Snap (HTTP client) + mode simulation, `POST /orders`, `GET /orders/{order_code}`, notifikasi bersignature (idempoten), Filament 5 `/admin` (paket, transaksi, pengguna + penyesuaian kredit), reset sandi API + web. 79 feature test lulus. Key hanya lewat `config('services.midtrans.*')`; `.env` diberi variabel Midtrans kosong | §16 #25–#28. Tinggal uji manual Sandbox oleh pengguna |
+| 2026-11-16 | C (persiapan) | Diagnosis login macet di Windows: request tidak pernah sampai server (tidak ada device/token/penghitung gagal). Penyebab yang terbukti: `AuthController.login` hanya menangkap `AuthException`, sehingga error lain (mis. `FormatException` dari `API_BASE_URL` bertanda kurung markdown) atau secure storage yang menggantung membuat spinner berputar selamanya. Diperbaiki + 15 test baru (142 lulus). Android: `INTERNET` di manifest main, cleartext hanya debug/profile | Pastikan `--dart-define=API_BASE_URL=http://127.0.0.1:8000/api` diketik tanpa tanda kurung |
+| 2026-11-16 | C | Aplikasi tersambung ke backend: auto-login, lupa sandi, hapus akun + hapus data lokal, kredit & pembelian (url_launcher, muat ulang status), SyncService statistik, Saran AI via server, `.env` dihapus dari asset, pesan error ramah. 167 test lulus; E2E API lokal lulus (akun uji dihapus lagi) | §16 #29. Paket baru: `url_launcher`; dihapus: `flutter_dotenv`. Tinggal uji manual UI & Sandbox |

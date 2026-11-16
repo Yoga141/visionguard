@@ -59,30 +59,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     if (mounted) context.go(Routes.login);
   }
 
+  /// UC-05: peringatan → kata sandi → `DELETE /me` → hapus data lokal → Login.
   Future<void> _deleteAccount() async {
-    final ok = await showDialog<bool>(
+    final password = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        icon: const Icon(Icons.warning_amber_rounded),
-        title: const Text('Hapus akun?'),
-        content: const Text(
-          'Akun, perangkat, dan statistik akan dihapus permanen, termasuk sisa kredit. '
-          'Data lokal (kalibrasi, metrik, pengaturan) juga dihapus.\n\n'
-          'Catatan: penghapusan permanen baru aktif setelah backend tersedia.',
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Hapus Akun'),
-          ),
-        ],
-      ),
+      builder: (context) => const DeleteAccountDialog(),
     );
-    if (ok == true && mounted) {
-      _snack('Belum tersedia: penghapusan akun permanen aktif setelah backend tersedia.');
-    }
+    if (password == null || !mounted) return;
+
+    await ref.read(monitoringControllerProvider.notifier).stop();
+    final result = await ref.read(authControllerProvider.notifier).deleteAccount(password);
+    if (!mounted) return;
+    _snack(result.message);
+    if (result.ok) context.go(Routes.login);
   }
 
   @override
@@ -245,6 +234,80 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Dialog hapus akun (UC-05): peringatan data & sisa kredit hilang, lalu
+/// kata sandi untuk verifikasi. Mengembalikan kata sandi, atau null bila batal.
+class DeleteAccountDialog extends StatefulWidget {
+  const DeleteAccountDialog({super.key});
+
+  @override
+  State<DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
+  final _password = TextEditingController();
+  bool _understood = false;
+  bool _obscure = true;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    super.dispose();
+  }
+
+  bool get _canSubmit => _understood && _password.text.isNotEmpty;
+
+  @override
+  Widget build(BuildContext context) {
+    final error = Theme.of(context).colorScheme.error;
+    return AlertDialog(
+      icon: const Icon(Icons.warning_amber_rounded),
+      title: const Text('Hapus akun?'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Akun, perangkat, dan statistik di server dihapus permanen, termasuk sisa kredit. '
+              'Riwayat transaksi disimpan tanpa identitas Anda. '
+              'Data di perangkat ini (kalibrasi, metrik, pengaturan) juga dihapus.',
+            ),
+            const SizedBox(height: 12),
+            CheckboxListTile(
+              value: _understood,
+              onChanged: (v) => setState(() => _understood = v ?? false),
+              title: const Text('Saya mengerti dan ingin menghapus akun'),
+              controlAffinity: ListTileControlAffinity.leading,
+              contentPadding: EdgeInsets.zero,
+            ),
+            TextField(
+              controller: _password,
+              obscureText: _obscure,
+              onChanged: (_) => setState(() {}),
+              decoration: InputDecoration(
+                labelText: 'Kata sandi',
+                prefixIcon: const Icon(Icons.lock_outline),
+                suffixIcon: IconButton(
+                  icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
+                  onPressed: () => setState(() => _obscure = !_obscure),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Batal')),
+        FilledButton(
+          style: FilledButton.styleFrom(backgroundColor: error),
+          onPressed: _canSubmit ? () => Navigator.pop(context, _password.text) : null,
+          child: const Text('Hapus Akun'),
+        ),
+      ],
     );
   }
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    HANYA build profile (uji performa di HP): izinkan http:// (cleartext) ke backend
+    pengembangan lokal. Build release tidak memakai file ini, sehingga tetap HTTPS saja
+    (DOCS_SPEC KMN-01).
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

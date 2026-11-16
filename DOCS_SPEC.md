@@ -714,6 +714,7 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 26 | Detail pemrosesan notifikasi Midtrans tidak dirinci (§8.4). | **Diterapkan:** order tak dikenal → **404**; signature valid tetapi `gross_amount` ≠ `amount_idr` → **422**, tanpa kredit; `capture` + `fraud_status=accept` = lunas, `challenge` = tetap pending; `failure` → `deny`; status final hanya ditulis bila order masih `pending` (order lunas tidak pernah diturunkan); kredit = `credit_packages.credits` saat lunas; `paid_at` dari `settlement_time` (WIB → UTC). Snap menerima `item_details` paket & `customer_details` (nama, email). Bila Snap gagal → order dihapus, **503**. `GET /orders/{order_code}` mengecek Status API Midtrans untuk order pending (cadangan notifikasi terlambat, idempoten). Snap API hanya mendukung `callbacks.finish`; URL unfinish/error diisi di dashboard Midtrans. |
 | 27 | Format tautan reset sandi (halaman web atau deep link) & perilaku setelah reset belum ditentukan. | **Diterapkan:** tautan email → halaman web Laravel `/reset-password/{token}?email=` (bukan deep link). Reset sukses mencabut semua token Sanctum. Permintaan tautan ulang < 60 dtk untuk email yang sama → **429**; batas 10 req/menit/IP untuk kedua endpoint. Email berbahasa Indonesia. `MAIL_MAILER=log` bawaan; SMTP Gmail (App Password) didokumentasikan di `.env.example`. |
 | 28 | Detail panel admin Filament. | **Diterapkan:** Filament 5 di `/admin`, hanya `role=admin` (`User::canAccessPanel`). A-01 paket: tambah/ubah/aktif-nonaktif; hapus hanya bila belum pernah dibeli (UI + guard model + FK RESTRICT). A-02 transaksi: hanya baca, filter status & tanggal. A-03 pengguna: hanya baca + saldo + aksi "Sesuaikan kredit" (`CreditAdjustmentService`: alasan wajib, delta ≠ 0, saldo akhir ≥ 0). Tabel `users` tanpa `remember_token`, jadi "ingat saya" di login admin tidak menyimpan apa pun. |
+| 29 | Detail integrasi klien (Tahap C) tidak diatur SDD: penyimpanan persetujuan privasi, auto-login offline, cara membuka halaman bayar. | **Diterapkan (16 Nov 2026):** backend asli = bawaan (`USE_REMOTE_API=false` → tiruan; `flutter test` selalu tiruan). Base URL bawaan `http://127.0.0.1:8000/api` (desktop) / `http://10.0.2.2:8000/api` (emulator Android), ganti dengan `--dart-define=API_BASE_URL`. Auto-login: token → `GET /me`; 401 → token dihapus; offline/5xx → masuk dengan profil terakhir (`settings`: `auth.cached_user`, `auth.device_id`), sehingga Mode Timer & pemantauan tetap jalan offline. Persetujuan privasi per akun: `settings` `privacy_accepted:<email>` (bukan di server). Pembayaran: `redirect_url` dibuka di browser eksternal (`url_launcher`, tanpa WebView); saat kembali ke aplikasi order pending dicek otomatis + tombol "Muat ulang status". Hapus akun menghapus semua tabel lokal (§12.3). Logout menghapus profil tersimpan, bukan persetujuan privasi. |
 
 ---
 
@@ -747,7 +748,7 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 4. Respons teks ditampilkan. Jika gagal, saran statis ditampilkan.
 
 ### 17.4 Endpoint usulan — `POST /ai/advice` (🟡 USULAN, perlu persetujuan)
-> Sudah dibangun di `backend/` (Tahap A) dengan batas 10/jam/pengguna, lihat §16 #22 dan `API_CONTRACT.md`. Klien belum memakainya (Tahap C).
+> Sudah dibangun di `backend/` (Tahap A) dengan batas 10/jam/pengguna, lihat §16 #22 dan `API_CONTRACT.md`. Sejak Tahap C klien memakainya secara bawaan.
 - Auth: token Sanctum.
 - Request:
   ```json
@@ -764,7 +765,8 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 - Server menyimpan `GEMINI_API_KEY` di `.env` Laravel, tidak pernah di klien. Server tidak menyimpan prompt/respons kecuali diputuskan lain.
 
 ### 17.5 Risiko API key di klien
-- Saat ini `.env` didaftarkan sebagai **asset Flutter** (`pubspec.yaml`). Akibatnya `GEMINI_API_KEY` **ikut ter-bundle** di setiap build (exe/apk/ipa/web) dan **dapat diekstrak** siapa pun yang memegang aplikasinya.
+- **Status (Tahap C, 16 Nov 2026): diatasi.** `.env` sudah **dihapus dari asset Flutter** dan `flutter_dotenv` dilepas; Saran AI bawaan lewat `POST /ai/advice`. Panggilan Gemini langsung hanya untuk build debug dengan `--dart-define=GEMINI_API_KEY=...` (nilai dart-define tetap tertanam di build itu, jadi jangan bagikan build debug tersebut).
+- Sebelumnya `.env` didaftarkan sebagai **asset Flutter** sehingga `GEMINI_API_KEY` **ikut ter-bundle** di setiap build dan **dapat diekstrak**. Bila key lama pernah ikut build yang dibagikan, rotasi key tersebut.
 - Konsekuensinya: penyalahgunaan kuota/biaya atas nama proyek, dan key tidak bisa dicabut per pengguna.
 - Mitigasi:
   1. Pemanggilan langsung **hanya untuk pengembangan lokal**; jangan distribusikan build yang memuat key.

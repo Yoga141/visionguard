@@ -55,3 +55,39 @@ class ValidationException extends ApiException {
 class NetworkException extends ApiException {
   const NetworkException(super.message);
 }
+
+/// Pesan ramah untuk ditampilkan ke pengguna (Tahap C, poin 8).
+///
+/// Pesan server dipakai bila sudah jelas & berbahasa Indonesia (402, 403,
+/// 422, 429); kode lain memakai pesan baku agar teks bawaan Laravel
+/// (mis. "Unauthenticated.") tidak sampai ke pengguna.
+String friendlyErrorMessage(Object error) {
+  if (error is ValidationException) {
+    for (final list in error.errors.values) {
+      if (list.isNotEmpty) return list.first;
+    }
+    return 'Data yang dikirim belum benar. Periksa kembali isian Anda.';
+  }
+  if (error is NetworkException) return error.message;
+  if (error is! ApiException) return 'Terjadi kesalahan tak terduga. Coba lagi.';
+
+  String serverOr(String fallback) {
+    final m = error.message.trim();
+    final looksDefault = m.isEmpty || m.endsWith('.') && !m.contains(' ') || m == 'Unauthenticated.';
+    return looksDefault ? fallback : m;
+  }
+
+  return switch (error.statusCode) {
+    401 => 'Sesi Anda berakhir. Silakan masuk lagi.',
+    402 => serverOr('Kredit tidak cukup. Beli kredit atau gunakan Mode Timer.'),
+    403 => serverOr('Akses ditolak.'),
+    404 => 'Data tidak ditemukan.',
+    429 => serverOr('Terlalu banyak permintaan. Coba lagi sebentar lagi.'),
+    503 => serverOr('Layanan sedang tidak tersedia. Coba lagi nanti.'),
+    final int code when code >= 500 => 'Server sedang bermasalah. Coba lagi nanti.',
+    _ => serverOr('Terjadi kesalahan. Coba lagi.'),
+  };
+}
+
+/// 429 — dibatasi (login ditahan, lupa sandi terlalu sering, batas Saran AI).
+bool isTooManyRequests(Object e) => e is ApiException && e.statusCode == 429;

@@ -9,12 +9,39 @@ import '../domain/credit_models.dart';
 
 /// S-09 Kredit & Pembayaran: kuota gratis, saldo, status hari ini (KRD-01,
 /// UC-18), paket kredit (UC-19), riwayat transaksi & pemakaian (KRD-04, UC-20).
-/// Data dari repository tiruan sampai backend Laravel siap.
-class CreditsPage extends ConsumerWidget {
+/// Pembelian: `POST /orders` → halaman Snap di browser → kembali → "Muat ulang status".
+class CreditsPage extends ConsumerStatefulWidget {
   const CreditsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CreditsPage> createState() => _CreditsPageState();
+}
+
+class _CreditsPageState extends ConsumerState<CreditsPage> {
+  /// Kembali dari browser pembayaran → cek status order pending otomatis.
+  AppLifecycleListener? _lifecycle;
+
+  @override
+  void initState() {
+    super.initState();
+    _lifecycle = AppLifecycleListener(onResume: _onResume);
+  }
+
+  @override
+  void dispose() {
+    _lifecycle?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _onResume() async {
+    final s = ref.read(creditControllerProvider);
+    if (s.pendingOrder == null || s.checkingOrder) return;
+    final feedback = await ref.read(creditControllerProvider.notifier).reloadOrderStatus();
+    if (mounted) showCreditSnack(context, feedback.message);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final s = ref.watch(creditControllerProvider);
     final ctrl = ref.read(creditControllerProvider.notifier);
     return DefaultTabController(
@@ -52,6 +79,10 @@ Widget _page(List<Widget> children) => Center(
       ),
     );
 
+void showCreditSnack(BuildContext context, String message) => ScaffoldMessenger.of(context)
+  ..hideCurrentSnackBar()
+  ..showSnackBar(SnackBar(content: Text(message)));
+
 /// Format Rupiah sederhana, mis. 15000 → "Rp15.000".
 String formatRupiah(int v) {
   final digits = v.abs().toString();
@@ -81,6 +112,10 @@ class _BalanceTab extends StatelessWidget {
     final status = state.status;
     final theme = Theme.of(context);
     return _page([
+      if (state.pendingOrder != null) ...[
+        _PendingOrderCard(order: state.pendingOrder!, checking: state.checkingOrder),
+        const SizedBox(height: 12),
+      ],
       if (state.error != null) ...[
         Card(
           margin: EdgeInsets.zero,
@@ -121,7 +156,8 @@ class _BalanceTab extends StatelessWidget {
       const SizedBox(height: 20),
       Text('Paket kredit', style: theme.textTheme.titleMedium),
       const SizedBox(height: 8),
-      for (final p in state.packages) _PackageTile(package: p),
+      for (final p in state.packages)
+        _PackageTile(package: p, busy: state.buyingPackageId == p.id, disabled: state.buyingPackageId != null),
       const SizedBox(height: 8),
       Text(
         'Kuota gratis ${BusinessConstants.freeDaysPerMonth} Hari Pemantauan AI direset tiap awal bulan. '
@@ -190,23 +226,33 @@ class _TodayCard extends StatelessWidget {
   }
 }
 
-class _PackageTile extends StatelessWidget {
-  const _PackageTile({required this.package});
+class _PackageTile extends ConsumerWidget {
+  const _PackageTile({required this.package, required this.busy, required this.disabled});
   final CreditPackage package;
+  final bool busy;
+  final bool disabled;
 
-  Future<void> _buy(BuildContext context) => showDialog<void>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: Text('Beli ${package.name}'),
-          content: const Text('Pembayaran Midtrans akan tersedia setelah backend siap.'),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Tutup')),
-          ],
-        ),
-      );
+  Future<void> _buy(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Beli ${package.name}'),
+        content: Text('${package.credits} kredit seharga ${formatRupiah(package.priceIdr)}.\n\n'
+            'Halaman pembayaran Midtrans (QRIS, e-wallet, virtual account) akan dibuka di browser. '
+            'Kredit bertambah otomatis setelah pembayaran dikonfirmasi.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Batal')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Lanjut bayar')),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final feedback = await ref.read(creditControllerProvider.notifier).buy(package);
+    if (context.mounted) showCreditSnack(context, feedback.message);
+  }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
@@ -215,8 +261,74 @@ class _PackageTile extends StatelessWidget {
         subtitle: Text('${package.credits} kredit • ${formatRupiah(package.priceIdr)}'),
         trailing: FilledButton(
           style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
-          onPressed: () => _buy(context),
-          child: const Text('Beli'),
+          onPressed: disabled ? null : () => _buy(context, ref),
+          child: busy
+              ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Beli'),
+        ),
+      ),
+    );
+  }
+}
+
+/// UC-19 alur notifikasi terlambat: order tetap "Menunggu pembayaran" sampai
+/// server menerima notifikasi Midtrans; pengguna dapat memuat ulang status.
+class _PendingOrderCard extends ConsumerWidget {
+  const _PendingOrderCard({required this.order, required this.checking});
+  final CreditOrder order;
+  final bool checking;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final ctrl = ref.read(creditControllerProvider.notifier);
+    final theme = Theme.of(context);
+    return Card(
+      margin: EdgeInsets.zero,
+      color: theme.colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              const Icon(Icons.hourglass_top),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text('${order.status.label}: ${order.packageName}', style: theme.textTheme.titleMedium),
+              ),
+              IconButton(tooltip: 'Tutup', icon: const Icon(Icons.close), onPressed: ctrl.dismissPendingOrder),
+            ]),
+            Text('${order.orderCode} • ${formatRupiah(order.amountIdr)}'),
+            const SizedBox(height: 4),
+            const Text('Selesaikan pembayaran di browser. Setelah kembali ke aplikasi, '
+                'tekan "Muat ulang status" untuk melihat saldo terbaru.'),
+            const SizedBox(height: 12),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              FilledButton.icon(
+                onPressed: checking
+                    ? null
+                    : () async {
+                        final feedback = await ctrl.reloadOrderStatus();
+                        if (context.mounted) showCreditSnack(context, feedback.message);
+                      },
+                icon: checking
+                    ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.refresh),
+                label: const Text('Muat ulang status'),
+              ),
+              if (ctrl.lastRedirectUrl != null)
+                OutlinedButton.icon(
+                  onPressed: () async {
+                    final opened = await ctrl.openPaymentPage();
+                    if (!opened && context.mounted) {
+                      showCreditSnack(context, 'Halaman pembayaran tidak dapat dibuka.');
+                    }
+                  },
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('Buka halaman bayar'),
+                ),
+            ]),
+          ],
         ),
       ),
     );

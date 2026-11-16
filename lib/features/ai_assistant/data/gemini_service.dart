@@ -1,4 +1,3 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_generative_ai/google_generative_ai.dart';
 
 import '../../../cv_engine/fatigue_scorer.dart';
@@ -6,10 +5,11 @@ import 'ai_advice_repository.dart';
 
 /// Saran AI dengan memanggil Gemini **langsung dari klien**.
 ///
-/// ⚠️ **KHUSUS PENGEMBANGAN.** API key dibaca dari `.env` (`GEMINI_API_KEY`)
-/// yang ikut ter-bundle di aplikasi, sehingga dapat diekstrak dari build.
-/// Versi final **wajib** lewat backend (`ApiAiAdviceRepository`,
-/// POST /ai/advice) agar key hanya ada di server (DOCS_SPEC §17).
+/// ⚠️ **KHUSUS DEBUG.** API key dari `--dart-define=GEMINI_API_KEY=...`
+/// (tidak lagi dari asset `.env`). Nilai dart-define tertanam di build, jadi
+/// jangan dipakai untuk build yang dibagikan. Bawaan aplikasi memakai backend
+/// (`ApiAiAdviceRepository`, POST /ai/advice) agar key hanya ada di server
+/// (DOCS_SPEC §17).
 ///
 /// Yang dikirim hanya [AdviceMetrics] (angka ringkasan), tanpa frame/gambar.
 class DirectGeminiAdviceRepository implements AiAdviceRepository {
@@ -17,7 +17,7 @@ class DirectGeminiAdviceRepository implements AiAdviceRepository {
     String? apiKey,
     this.isAiEnabled = true,
     String? modelName,
-  })  : _apiKey = apiKey ?? dotenv.maybeGet('GEMINI_API_KEY') ?? '',
+  })  : _apiKey = apiKey ?? const String.fromEnvironment('GEMINI_API_KEY'),
         _modelName = modelName ?? 'gemini-2.0-flash';
 
   final String _apiKey;
