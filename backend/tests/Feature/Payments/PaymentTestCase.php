@@ -5,6 +5,7 @@ namespace Tests\Feature\Payments;
 use App\Models\CreditPackage;
 use App\Models\Order;
 use App\Models\User;
+use App\Services\Payments\MidtransGateway;
 use App\Services\Payments\PaymentNotificationService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -16,13 +17,31 @@ abstract class PaymentTestCase extends TestCase
 
     protected const DUMMY_SERVER_KEY = 'dummy-server-key-for-tests';
 
+    /** Model access key baru boleh berisi ~ dan . — sengaja dipakai di dummy. */
+    protected const DUMMY_SIGNATURE_SECRET = 'dummy~signature.secret-for-tests';
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        MidtransGateway::resetFallbackWarning();
+    }
+
+    /** Midtrans tanpa Signature Secret Key (fallback format lama: server key). */
     protected function useMidtrans(): void
     {
         config([
             'visionguard.payment_mode' => 'midtrans',
             'services.midtrans.server_key' => self::DUMMY_SERVER_KEY,
+            'services.midtrans.signature_secret_key' => '',
             'services.midtrans.is_production' => false,
         ]);
+    }
+
+    /** Midtrans dengan Signature Secret Key (model access key baru). */
+    protected function useMidtransWithSignatureSecret(): void
+    {
+        $this->useMidtrans();
+        config(['services.midtrans.signature_secret_key' => self::DUMMY_SIGNATURE_SECRET]);
     }
 
     protected function package(array $attributes = []): CreditPackage

@@ -31,7 +31,39 @@ class MidtransGateway implements PaymentGateway
         return PaymentManager::MODE_MIDTRANS;
     }
 
+    /** Peringatan fallback cukup sekali per proses. */
+    private static bool $warnedFallback = false;
+
+    /**
+     * Kunci verifikasi `signature_key` (notifikasi & Status API):
+     * SHA512(order_id + status_code + gross_amount + KUNCI).
+     * - Model access key baru: `MIDTRANS_SIGNATURE_SECRET_KEY`.
+     * - Kosong → Server Key (format lama) + peringatan di log.
+     * Server Key tetap dipakai untuk otorisasi API (Basic auth).
+     */
     public function signingKey(): string
+    {
+        $secret = (string) config('services.midtrans.signature_secret_key');
+        if ($secret !== '') {
+            return $secret;
+        }
+
+        if (! self::$warnedFallback) {
+            Log::warning('MIDTRANS_SIGNATURE_SECRET_KEY kosong; verifikasi notifikasi memakai Server Key (format lama). '
+                .'Isi Signature Secret Key dari Dashboard Midtrans → Settings → Access Keys.');
+            self::$warnedFallback = true;
+        }
+
+        return $this->serverKey();
+    }
+
+    /** Hanya untuk test: izinkan peringatan fallback muncul lagi. */
+    public static function resetFallbackWarning(): void
+    {
+        self::$warnedFallback = false;
+    }
+
+    private function serverKey(): string
     {
         return (string) config('services.midtrans.server_key');
     }
@@ -99,7 +131,7 @@ class MidtransGateway implements PaymentGateway
 
     private function client(): PendingRequest
     {
-        return Http::withBasicAuth($this->signingKey(), '')
+        return Http::withBasicAuth($this->serverKey(), '')
             ->acceptJson()
             ->asJson()
             ->timeout((int) config('services.midtrans.timeout'));

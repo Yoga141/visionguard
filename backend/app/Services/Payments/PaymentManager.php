@@ -28,7 +28,9 @@ class PaymentManager
 
         if ((string) config('services.midtrans.server_key') === '') {
             if (! $this->warned) {
-                Log::warning('PAYMENT_MODE=midtrans tetapi MIDTRANS_SERVER_KEY kosong; memakai mode simulation.');
+                Log::warning('PAYMENT_MODE=midtrans tetapi MIDTRANS_SERVER_KEY kosong; memakai mode simulation. '
+                    .'Isi key di backend/.env, simpan, lalu php artisan config:clear & restart server. '
+                    .'Cek: php artisan payments:check --ping');
                 $this->warned = true;
             }
 

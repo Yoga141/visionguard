@@ -36,6 +36,7 @@
         <env name="PAYMENT_MODE" value="midtrans" force="true"/>
         <env name="MIDTRANS_SERVER_KEY" value="" force="true"/>
         <env name="MIDTRANS_CLIENT_KEY" value="" force="true"/>
+        <env name="MIDTRANS_SIGNATURE_SECRET_KEY" value="" force="true"/>
         <env name="MIDTRANS_MERCHANT_ID" value="" force="true"/>
         <env name="MIDTRANS_IS_PRODUCTION" value="false" force="true"/>
         <env name="GEMINI_API_KEY" value="" force="true"/>

@@ -104,7 +104,7 @@ Role akun di DB: `ENUM('user','admin')`.
 - Klien ↔ server: **REST JSON over HTTPS (TLS ≥ 1.2)**. Server ↔ Midtrans/email: HTTPS/TLS.
 - Setiap request membawa **token Laravel Sanctum**; token disimpan di **penyimpanan aman** perangkat.
 - Kata sandi di-hash **bcrypt**.
-- Notifikasi Midtrans diverifikasi dengan **signature key SHA-512** sebelum diproses.
+- Notifikasi Midtrans diverifikasi dengan **signature key SHA-512** sebelum diproses (kunci: Signature Secret Key, lihat §8.4 & §16 #30).
 - Pengingat = **notifikasi lokal** (tanpa push service), tetap jalan offline.
 - Data yang boleh dikirim ke server: **akun, order, status hari pemantauan, ringkasan statistik angka**. Gambar **tidak pernah**.
 - **Sinkronisasi**: ringkasan harian yang belum tersinkron disimpan lokal, dikirim otomatis saat online kembali.
@@ -274,7 +274,8 @@ Menu utama: **Dashboard, Statistik, Kredit, Pengaturan**. Tiap pengingat ditutup
 1. User pilih paket → `POST /orders` → server buat `order_code` + total harga, insert order **status `pending`**.
 2. Server buat transaksi **Snap** → terima `snap_token` → kirim `snap_token + order_code` ke app.
 3. App tampilkan halaman pembayaran Midtrans (QRIS / e-wallet / VA).
-4. Midtrans kirim **HTTP notification** ke server → **verifikasi signature key (SHA-512)**.
+4. Midtrans kirim **HTTP notification** ke server → **verifikasi signature key (SHA-512)**:
+   `signature_key = SHA512(order_id + status_code + gross_amount + SIGNATURE_SECRET_KEY)` (model access key baru Midtrans, berlaku setelah 28 Okt 2026). Bila `MIDTRANS_SIGNATURE_SECRET_KEY` kosong → fallback ke **Server Key** (format lama) + peringatan di log. Server Key tetap untuk otorisasi API (Snap, Status API). Respons Status API diverifikasi dengan kunci yang sama.
    - Signature **tidak valid** → tolak & **catat log**.
    - Valid & status **`settlement`** → `UPDATE orders.status='settlement'` (+ `paid_at`, `payment_type`) dan `INSERT credit_ledger (+kredit, reason='purchase', order_id)`.
    - Valid & status **`expire`/`cancel`** (atau `deny`) → update status order, **tanpa** penambahan kredit.
@@ -715,6 +716,7 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 27 | Format tautan reset sandi (halaman web atau deep link) & perilaku setelah reset belum ditentukan. | **Diterapkan:** tautan email → halaman web Laravel `/reset-password/{token}?email=` (bukan deep link). Reset sukses mencabut semua token Sanctum. Permintaan tautan ulang < 60 dtk untuk email yang sama → **429**; batas 10 req/menit/IP untuk kedua endpoint. Email berbahasa Indonesia. `MAIL_MAILER=log` bawaan; SMTP Gmail (App Password) didokumentasikan di `.env.example`. |
 | 28 | Detail panel admin Filament. | **Diterapkan:** Filament 5 di `/admin`, hanya `role=admin` (`User::canAccessPanel`). A-01 paket: tambah/ubah/aktif-nonaktif; hapus hanya bila belum pernah dibeli (UI + guard model + FK RESTRICT). A-02 transaksi: hanya baca, filter status & tanggal. A-03 pengguna: hanya baca + saldo + aksi "Sesuaikan kredit" (`CreditAdjustmentService`: alasan wajib, delta ≠ 0, saldo akhir ≥ 0). Tabel `users` tanpa `remember_token`, jadi "ingat saya" di login admin tidak menyimpan apa pun. |
 | 29 | Detail integrasi klien (Tahap C) tidak diatur SDD: penyimpanan persetujuan privasi, auto-login offline, cara membuka halaman bayar. | **Diterapkan (16 Nov 2026):** backend asli = bawaan (`USE_REMOTE_API=false` → tiruan; `flutter test` selalu tiruan). Base URL bawaan `http://127.0.0.1:8000/api` (desktop) / `http://10.0.2.2:8000/api` (emulator Android), ganti dengan `--dart-define=API_BASE_URL`. Auto-login: token → `GET /me`; 401 → token dihapus; offline/5xx → masuk dengan profil terakhir (`settings`: `auth.cached_user`, `auth.device_id`), sehingga Mode Timer & pemantauan tetap jalan offline. Persetujuan privasi per akun: `settings` `privacy_accepted:<email>` (bukan di server). Pembayaran: `redirect_url` dibuka di browser eksternal (`url_launcher`, tanpa WebView); saat kembali ke aplikasi order pending dicek otomatis + tombol "Muat ulang status". Hapus akun menghapus semua tabel lokal (§12.3). Logout menghapus profil tersimpan, bukan persetujuan privasi. |
+| 30 | Midtrans mengganti model access key (docs.midtrans.com/docs/access-keys): Server Key (otorisasi API), Client Key (klien), Signature Secret Key (verifikasi notifikasi), Merchant ID (identitas). SDD/§8.4 lama memakai server key untuk signature. | **Diterapkan (16 Nov 2026, atas arahan pengguna):** `MIDTRANS_SIGNATURE_SECRET_KEY` → `config('services.midtrans.signature_secret_key')` (di-trim & dibersihkan seperti key lain); signature notifikasi & Status API = SHA512(order_id + status_code + gross_amount + secret). Secret kosong → fallback Server Key + `Log::warning` (sekali per proses). Basic auth API tetap Server Key. `MIDTRANS_MERCHANT_ID` opsional (tidak divalidasi). Key boleh berisi `~` dan `.`. Idempotensi tetap via `UNIQUE(credit_ledger.order_id)` + kunci baris order. |
 
 ---
 

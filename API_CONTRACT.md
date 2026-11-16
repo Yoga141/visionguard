@@ -353,7 +353,9 @@ Request (contoh dari Midtrans):
   "signature_key": "<sha512>"
 }
 ```
-- `signature_key` wajib = `SHA512(order_id + status_code + gross_amount + server_key)`.
+- `signature_key` wajib = `SHA512(order_id + status_code + gross_amount + SIGNATURE_SECRET_KEY)` (model access key baru Midtrans).
+  Bila `MIDTRANS_SIGNATURE_SECRET_KEY` server kosong, dipakai Server Key (format lama) dan server mencatat peringatan.
+  Kunci yang sama memverifikasi respons Status API pada `GET /orders/{order_code}`.
 
 | Kondisi | Hasil | HTTP |
 |---|---|---|

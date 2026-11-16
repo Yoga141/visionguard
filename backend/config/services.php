@@ -37,9 +37,14 @@ return [
 
     // Midtrans Snap (DOCS_SPEC §8.4). Key hanya di backend/.env; akses lewat config('services.midtrans.*').
     'midtrans' => [
-        'server_key' => env('MIDTRANS_SERVER_KEY'),
-        'client_key' => env('MIDTRANS_CLIENT_KEY'),
-        'merchant_id' => env('MIDTRANS_MERCHANT_ID'),
+        // Dibersihkan dari spasi tepi & karakter tak terlihat (salin-tempel dari dashboard).
+        'server_key' => preg_replace('/[\x{200B}-\x{200D}\x{2060}\x{FEFF}\x{00A0}]/u', '', trim((string) env('MIDTRANS_SERVER_KEY', ''))),
+        'client_key' => preg_replace('/[\x{200B}-\x{200D}\x{2060}\x{FEFF}\x{00A0}]/u', '', trim((string) env('MIDTRANS_CLIENT_KEY', ''))),
+        // Model access key baru Midtrans: verifikasi signature_key notifikasi (DOCS_SPEC §8.4).
+        // Kosong → fallback ke server_key (format lama) + peringatan di log.
+        'signature_secret_key' => preg_replace('/[\x{200B}-\x{200D}\x{2060}\x{FEFF}\x{00A0}]/u', '', trim((string) env('MIDTRANS_SIGNATURE_SECRET_KEY', ''))),
+        // Opsional: hanya identitas akun, tidak dipakai untuk otorisasi.
+        'merchant_id' => trim((string) env('MIDTRANS_MERCHANT_ID', '')),
         'is_production' => (bool) env('MIDTRANS_IS_PRODUCTION', false),
         'timeout' => (int) env('MIDTRANS_TIMEOUT', 15),
     ],

@@ -52,8 +52,9 @@ Paket kredit aktif: Paket Hemat (5 kredit, Rp15.000), Paket Reguler (12, Rp30.00
 | `CORS_ALLOWED_ORIGINS` | `*` | Pengembangan: `*`. Produksi: daftar origin dipisah koma |
 | `PAYMENT_MODE` | `midtrans` | `midtrans` atau `simulation` (lihat bagian pembayaran) |
 | `MIDTRANS_SERVER_KEY` | kosong | Kosong → otomatis mode `simulation` + peringatan di log |
-| `MIDTRANS_CLIENT_KEY` | kosong | Disimpan untuk klien Snap; belum dipakai server |
-| `MIDTRANS_MERCHANT_ID` | kosong | Informasi akun; belum dipakai server |
+| `MIDTRANS_CLIENT_KEY` | kosong | Untuk klien Snap; belum dipakai server |
+| `MIDTRANS_SIGNATURE_SECRET_KEY` | kosong | Verifikasi `signature_key` notifikasi (model access key baru). Kosong → fallback ke Server Key (format lama) + peringatan di log |
+| `MIDTRANS_MERCHANT_ID` | kosong | **Opsional**, hanya identitas akun; tidak dipakai untuk otorisasi |
 | `MIDTRANS_IS_PRODUCTION` | `false` | `false` = Sandbox |
 | `MAIL_MAILER` | `log` | Email reset sandi ditulis ke `storage/logs/laravel.log` |
 | `GEMINI_API_KEY` | kosong | Kosong → `POST /ai/advice` menjawab 503, klien memakai saran statis |
@@ -66,17 +67,45 @@ Aturan bisnis lain (kuota gratis 2/bulan, login ditahan 5 menit setelah 5× gaga
 
 Key **tidak pernah** ditulis di kode, test, atau dokumen. Isi sendiri di `backend/.env`:
 
+Midtrans memakai model access key (docs.midtrans.com/docs/access-keys):
+
+| Key | Dipakai untuk |
+|---|---|
+| **Server Key** | Otorisasi API server (Snap & Status API, Basic auth `base64(SERVER_KEY + ":")`) |
+| **Client Key** | Klien (Snap JS/aplikasi); belum dipakai server |
+| **Signature Secret Key** | `signature_key` notifikasi = `SHA512(order_id + status_code + gross_amount + SIGNATURE_SECRET_KEY)` |
+| Merchant ID | Hanya identitas akun (opsional) |
+
+Key model baru boleh berisi karakter seperti `~` dan `.` — itu normal.
+
 1. Masuk ke dashboard Midtrans, pilih lingkungan **Sandbox**.
-2. Buka **Settings → Access Keys**.
-3. Salin nilainya ke variabel berikut di `backend/.env`:
+2. Buka **Settings → Access Keys**. Untuk Server Key, buat key dengan izin **Snap Checkout: Write**
+   dan **Core API: Read**; salin nilainya langsung dari pop-up yang muncul (hanya ditampilkan sekali).
+   Salin juga Client Key dan Signature Secret Key.
+3. Tempel ke variabel berikut di `backend/.env`:
    ```dotenv
    PAYMENT_MODE=midtrans
    MIDTRANS_SERVER_KEY=
    MIDTRANS_CLIENT_KEY=
+   MIDTRANS_SIGNATURE_SECRET_KEY=
    MIDTRANS_MERCHANT_ID=
    MIDTRANS_IS_PRODUCTION=false
    ```
+   Isi nilai di baris yang **sudah ada** (jangan menambah baris kedua dengan nama sama: Laravel
+   memakai definisi **pertama**), tanpa spasi atau tanda kutip, lalu **simpan** file.
 4. Muat ulang konfigurasi: `php artisan config:clear`, lalu jalankan ulang `php artisan serve`.
+5. Periksa (nilai key tidak pernah ditampilkan):
+   ```bash
+   php artisan payments:check          # mode efektif + status ADA/KOSONG tiap key
+   php artisan payments:check --ping   # + verifikasi server key ke Midtrans, tanpa membuat transaksi
+   ```
+   Harus tampil `Mode efektif : midtrans`, `Verifikasi signature : Signature Secret Key`, dan
+   `Server key DITERIMA Midtrans (Sandbox).`
+   Bila masih `simulation`, key belum terbaca dari `backend/.env`.
+   Bila `Verifikasi signature : Server Key (fallback format lama)`, `MIDTRANS_SIGNATURE_SECRET_KEY` kosong.
+   Bila `DITOLAK Midtrans (401)`: buat Server Key baru dengan izin Snap Checkout: Write dan Core API: Read,
+   salin dari pop-up, lalu `php artisan config:clear` dan restart server. Perintah ini juga melaporkan
+   awalan & panjang key tanpa menampilkan nilai.
 
 Kode membaca key hanya lewat `config('services.midtrans.*')`. Test memakai key dummy dari `tests/` dan
 mengosongkan key di `phpunit.xml`, sehingga key asli di `.env` tidak pernah dipakai saat `php artisan test`.

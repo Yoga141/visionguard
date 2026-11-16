@@ -8,6 +8,7 @@ use App\Services\Payments\PaymentManager;
 use App\Services\Payments\SimulationGateway;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Mockery;
 
 /** PAYMENT_MODE midtrans/simulation dan fallback saat server key kosong (§16 #25). */
 class PaymentModeTest extends PaymentTestCase
@@ -27,7 +28,7 @@ class PaymentModeTest extends PaymentTestCase
         $this->assertStringStartsWith('SIM-', $res->json('snap_token'));
         Http::assertNothingSent();
         Log::shouldHaveReceived('warning')
-            ->with('PAYMENT_MODE=midtrans tetapi MIDTRANS_SERVER_KEY kosong; memakai mode simulation.')
+            ->with(Mockery::on(fn ($m) => str_starts_with($m, 'PAYMENT_MODE=midtrans tetapi MIDTRANS_SERVER_KEY kosong; memakai mode simulation.')))
             ->once();
     }
 
