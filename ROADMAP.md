@@ -12,7 +12,7 @@ Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` + `backend/` Ta
 | [x] **A** | Backend Laravel inti (`./backend`, MySQL, Sanctum, endpoint §11, `POST /ai/advice`) | ✅ selesai — 36 feature test lulus; `API_CONTRACT.md` disetujui pengguna (16 Nov 2026) |
 | [ ] **B** | Midtrans Sandbox, panel admin Filament, reset kata sandi via email | 🟡 sebagian — kode + 79 feature test selesai; tinggal uji manual Sandbox dengan key milik pengguna |
 | [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — kode selesai, 167 test lulus, E2E API ke backend lokal lulus; tinggal uji manual UI (Windows) & beli paket di Sandbox |
-| [ ] **D** | Deteksi wajah asli (MediaPipe) | ⏳ belum — antarmuka `FaceAnalyzer` + `DummyFaceAnalyzer` siap; `tflite_flutter` masih dikomentari |
+| [ ] **D** | Deteksi wajah asli (MediaPipe) | 🟡 sebagian — `MediaPipeFaceAnalyzer` (tflite_flutter 0.12.1) + fallback mode simulasi selesai, 191 test lulus, APK debug ter-build; tinggal uji di HP Android asli (kedip, jarak 30/50/80 cm, yaw, fps). Windows → mode simulasi (tanpa image stream) |
 | [ ] **E** | Latar belakang/system tray, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ | ⏳ belum |
 | [ ] **F** | Finalisasi + `HANDOFF.md` | ⏳ belum |
 
@@ -268,7 +268,7 @@ Catatan: izin cleartext Android untuk `http://` lokal **sudah dipasang** (16 Nov
 
 ### Tahap D — Deteksi wajah asli (MediaPipe)
 
-**Status:** ⏳ belum. Antarmuka `FaceAnalyzer` dan `DummyFaceAnalyzer` siap; `MediaPipeFaceAnalyzer` belum ada; `tflite_flutter` masih dikomentari di `pubspec.yaml`. Build APK Android sudah bisa (perbaikan Gradle di `aca273a`).
+**Status:** 🟡 sebagian (23 Nov 2026). `MediaPipeFaceAnalyzer` + `face_mesh_geometry.dart` + `selectFaceAnalyzer` (fallback otomatis) selesai; model di `assets/models/`; indeks landmark diverifikasi (§16 #31). Belum diuji dengan wajah asli di HP Android. Windows memakai mode simulasi karena `camera_windows` 0.3.x tidak menyediakan image stream.
 
 **Tujuan:** mengganti `DummyFaceAnalyzer` dengan `MediaPipeFaceAnalyzer` yang menghasilkan 478 landmark + yaw dari frame kamera, tanpa mengubah `BlinkAnalyzer`, `DistanceEstimator`, `FatigueScorer`, dan `SessionEvaluator`.
 
@@ -286,9 +286,9 @@ Catatan: izin cleartext Android untuk `http://` lokal **sudah dipasang** (16 Nov
 
 **Kriteria selesai:**
 - [ ] **Android (wajib):** kedipan nyata terdeteksi, jarak tampil wajar setelah kalibrasi (uji 30/50/80 cm dengan penggaris, target ±5 cm), menoleh > 30° → frame tidak valid, ≥ 10 fps.
-- [ ] **Windows (best effort):** sama seperti Android dengan target ≥ 15 fps; bila belum berhasil, aplikasi otomatis memakai dummy dan alasannya dicatat di README/ROADMAP.
-- [ ] Tidak ada frame yang disimpan/dikirim (cek manual: tidak ada `File(...).write`, `print(frame)`, atau upload di jalur kamera).
-- [ ] `lib/cv_engine/` tetap tanpa import UI.
+- [x] **Windows (best effort):** sama seperti Android dengan target ≥ 15 fps; bila belum berhasil, aplikasi otomatis memakai dummy dan alasannya dicatat di README/ROADMAP. *(Belum berhasil: `camera_windows` 0.3.1 tanpa image stream → "Mode simulasi — camera_windows belum menyediakan image stream"; dicatat di README.)*
+- [x] Tidak ada frame yang disimpan/dikirim (cek manual: tidak ada `File(...).write`, `print(frame)`, atau upload di jalur kamera).
+- [x] `lib/cv_engine/` tetap tanpa import UI.
 
 **Cara verifikasi:**
 ```bash
@@ -407,3 +407,4 @@ Isi satu baris setiap akhir sesi (terbaru di bawah).
 | 2026-11-16 | B (perbaikan) | Diagnosis 401 Midtrans: format `.env` bersih (tanpa BOM/kutip/spasi/`
 `/karakter tak terlihat, tidak tertukar, awalan SB- benar, panjang 38), implementasi ping benar (URL, Basic base64(key+":"), Accept JSON); Status API & Snap (payload tanpa transaksi) sama-sama 401, identik dengan kunci kosong/acak → key tidak dikenali Sandbox. Key memuat `~`/`.` dan Merchant ID tidak berawalan G. Ditambah trim key di config + laporan format di `payments:check`. 85 test backend lulus | Pengguna perlu menyalin ulang key asli Sandbox |
 | 2026-11-16 | B (perbaikan) | Model access key baru Midtrans: `MIDTRANS_SIGNATURE_SECRET_KEY` (verifikasi notifikasi, fallback Server Key + peringatan), Merchant ID opsional, `payments:check` tanpa peringatan karakter `~`/`.` & awalan G, saran 401 (izin Snap Checkout: Write, Core API: Read). Koreksi diagnosis sebelumnya: `~`/`.` di key bukan masalah. 91 test backend lulus | §16 #30 |
+| 2026-11-23 | D | Jalur `tflite_flutter` 0.12.1 + MediaPipe Face Landmarker dipilih pengguna. `MediaPipeFaceAnalyzer` (BlazeFace 128 → ROI berotasi → 478 landmark 256, pelacakan ROI dari landmark, `IsolateInterpreter`, sampling langsung YUV420/BGRA tanpa salinan ke disk), `face_mesh_geometry.dart`, rotasi sensor di `CameraFrame`, `selectFaceAnalyzer` (fallback "Mode simulasi — alasan"). Model + lisensi di README. 24 test baru (191 lulus), `flutter analyze` bersih, `flutter build apk --debug` berhasil. Perbaikan build: komentar XML `network_security_config.xml` (debug) berisi `--`; target JVM Kotlin `tflite_flutter` disamakan ke 11 di `android/build.gradle.kts` | §16 #31. Paket baru: `tflite_flutter`. Windows tetap simulasi (`camera_windows` 0.3.1 tanpa image stream). Belum diuji di HP: kedipan vs hitung manual, jarak 30/50/80 cm, yaw > 30°, fps; arah rotasi kamera depan juga perlu dicek (ada koreksi otomatis 0/180°) |

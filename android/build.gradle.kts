@@ -24,6 +24,14 @@ subprojects {
             }
         }
     }
+
+    // tflite_flutter 0.12.1 mengompilasi Java ke target 11, sedangkan Kotlin
+    // bawaan memakai JVM terbaru → samakan target Kotlin ke 11 (Tahap D).
+    if (project.name == "tflite_flutter") {
+        tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+            compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
+        }
+    }
 }
 subprojects {
     project.evaluationDependsOn(":app")

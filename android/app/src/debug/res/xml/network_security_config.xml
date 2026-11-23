@@ -2,7 +2,7 @@
 <!--
     HANYA build debug: izinkan http:// (cleartext) ke backend pengembangan lokal,
     mis. emulator → http://10.0.2.2:8000/api, HP fisik → http://<IP-LAN-laptop>:8000/api
-    (jalankan `php artisan serve --host=0.0.0.0`).
+    (jalankan php artisan serve dengan opsi host 0.0.0.0, lihat AGENTS.md).
     Build release tidak memakai file ini, sehingga tetap HTTPS saja (DOCS_SPEC KMN-01).
 -->
 <network-security-config>

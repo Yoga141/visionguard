@@ -4,16 +4,23 @@ import '../core/constants/cv_constants.dart';
 import 'camera_source.dart';
 import 'face_analyzer.dart';
 
-/// Implementasi [FaceAnalyzer] tiruan untuk tahap progress 30%.
+/// Implementasi [FaceAnalyzer] tiruan ("mode simulasi").
 ///
-/// Belum memakai MediaPipe. Kelas ini membangkitkan 478 landmark sintetis
+/// Dipakai di test dan sebagai fallback otomatis bila MediaPipe tidak
+/// didukung platform (mis. Windows tanpa image stream) atau model gagal
+/// dimuat (lihat `selectFaceAnalyzer`). Kelas ini membangkitkan 478 landmark sintetis
 /// yang meniru perilaku nyata: mata berkedip (~14x/menit, tutup ±180-300 ms) dan
 /// jarak wajah yang bergerak perlahan antara ±40-65 cm. Dengan begitu rumus
 /// EAR, PERCLOS, jarak, dan skor kelelahan dapat diuji end-to-end.
 ///
-/// Akan diganti oleh MediaPipeFaceAnalyzer tanpa mengubah kelas lain.
+/// Opsi demo (simulasi lelah/terlalu dekat) hanya tersedia dengan kelas ini.
 class DummyFaceAnalyzer implements FaceAnalyzer {
-  DummyFaceAnalyzer({this.simulatedFocalPx = 600, int seed = 42}) : _rng = math.Random(seed);
+  DummyFaceAnalyzer({this.simulatedFocalPx = 600, int seed = 42, this.reason})
+      : _rng = math.Random(seed);
+
+  /// Alasan memakai mode simulasi (ditampilkan di Dashboard), mis. platform
+  /// tidak didukung. null = dipilih langsung (test).
+  final String? reason;
 
   /// Focal length "kamera virtual" yang dipakai untuk membangkitkan lebar iris.
   final double simulatedFocalPx;
@@ -31,7 +38,7 @@ class DummyFaceAnalyzer implements FaceAnalyzer {
   DateTime? _blinkEnd;
 
   @override
-  String get name => 'Dummy (simulasi, belum MediaPipe)';
+  String get name => reason == null ? 'Mode simulasi (data wajah tiruan)' : 'Mode simulasi — $reason';
 
   @override
   Future<void> load() async {

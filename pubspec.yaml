@@ -41,8 +41,8 @@ dependencies:
   # Grafik tren 7 & 30 hari di halaman Statistik (S-08, STK-02)
   fl_chart: ^1.3.0
 
-  # --- Tahap berikutnya (belum dipakai) ---
-  # tflite_flutter: ^0.11.0          # runtime MediaPipe Face Landmarker
+  # Runtime TFLite/LiteRT untuk MediaPipe Face Landmarker (DOCS_SPEC §4.2, Tahap D)
+  tflite_flutter: ^0.12.1
 
 dev_dependencies:
   flutter_test:
@@ -54,3 +54,7 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  # Model MediaPipe Face Landmarker (Apache 2.0), lihat README.md
+  assets:
+    - assets/models/face_detector.tflite
+    - assets/models/face_landmarks_detector.tflite

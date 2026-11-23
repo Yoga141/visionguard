@@ -96,4 +96,24 @@ class CvConstants {
 
   /// Jumlah landmark yang dihasilkan MediaPipe Face Landmarker (dengan iris).
   static const int landmarkCount = 478;
+
+  // ---- Inferensi MediaPipe Face Landmarker (Tahap D, DOCS_SPEC §16 #31) ----
+  /// Detektor BlazeFace short range: input 128×128 RGB ∈ [−1, 1], 896 anchor.
+  static const int detectorInputSize = 128;
+  static const List<int> detectorStrides = [8, 16, 16, 16];
+  static const int detectorAnchorCount = 896;
+  static const double detectorScoreMin = 0.5;
+  /// Deteksi dengan IoU ≥ nilai ini digabung (rata-rata berbobot).
+  static const double detectorNmsIou = 0.3;
+  /// Model landmark: input 256×256 RGB ∈ [0, 1] → 478 × (x, y, z).
+  static const int landmarkInputSize = 256;
+  /// Wajah dianggap ada bila sigmoid(skor kehadiran) ≥ nilai ini.
+  static const double facePresenceMin = 0.5;
+  /// Sisi ROI = sisi terpanjang wajah × faktor ini (seperti graf MediaPipe).
+  static const double roiScale = 1.5;
+  /// Tepi pipi kanan & kiri untuk yaw = atan2(Δz, Δx).
+  static const int yawRightIndex = 234;
+  static const int yawLeftIndex = 454;
+  /// Thread CPU per interpreter TFLite.
+  static const int inferenceThreads = 2;
 }

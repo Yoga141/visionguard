@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show DeviceOrientation;
 
 import '../core/constants/cv_constants.dart';
 
@@ -16,11 +17,16 @@ class CameraFrame {
   final DateTime timestamp;
   final CameraImage? image;
 
+  /// Putaran searah jarum jam (0/90/180/270) yang membuat [image] tegak.
+  /// [width]/[height] tetap ukuran buffer mentah (acuan FOV kalibrasi).
+  final int rotationDegrees;
+
   const CameraFrame({
     required this.width,
     required this.height,
     required this.timestamp,
     this.image,
+    this.rotationDegrees = 0,
   });
 }
 
@@ -34,6 +40,7 @@ class CameraSource {
   static const simulatedCameraId = 'simulated';
 
   CameraController? _controller;
+  CameraDescription? _description;
   String _cameraId = simulatedCameraId;
   Timer? _simTimer;
   final _frames = StreamController<CameraFrame>.broadcast();
@@ -86,6 +93,10 @@ class CameraSource {
         front,
         ResolutionPreset.medium, // ~640x480
         enableAudio: false,
+        // Format yang dibaca MediaPipeFaceAnalyzer (YUV420 Android, BGRA iOS).
+        imageFormatGroup: defaultTargetPlatform == TargetPlatform.iOS
+            ? ImageFormatGroup.bgra8888
+            : ImageFormatGroup.yuv420,
       );
       await controller.initialize();
       if (!_running) {
@@ -94,6 +105,7 @@ class CameraSource {
         return;
       }
       _controller = controller;
+      _description = front;
       _cameraId = front.name;
       _usingRealCamera = true;
       lastError = null;
@@ -125,7 +137,44 @@ class CameraSource {
     final now = DateTime.now();
     if (now.difference(_lastEmit) < _minInterval) return; // throttle ke fps target
     _lastEmit = now;
-    _frames.add(CameraFrame(width: img.width, height: img.height, timestamp: now, image: img));
+    _frames.add(CameraFrame(
+      width: img.width,
+      height: img.height,
+      timestamp: now,
+      image: img,
+      rotationDegrees: _rotation(),
+    ));
+  }
+
+  /// Rotasi buffer → tegak dari orientasi sensor & perangkat (Android/iOS).
+  int _rotation() {
+    final d = _description;
+    final c = _controller;
+    if (d == null || c == null) return 0;
+    return frameRotation(
+      sensorOrientation: d.sensorOrientation,
+      front: d.lensDirection == CameraLensDirection.front,
+      device: c.value.deviceOrientation,
+      platform: defaultTargetPlatform,
+    );
+  }
+
+  @visibleForTesting
+  static int frameRotation({
+    required int sensorOrientation,
+    required bool front,
+    required DeviceOrientation device,
+    required TargetPlatform platform,
+  }) {
+    if (platform == TargetPlatform.iOS) return sensorOrientation % 360;
+    if (platform != TargetPlatform.android) return 0;
+    final dev = switch (device) {
+      DeviceOrientation.portraitUp => 0,
+      DeviceOrientation.landscapeLeft => 90,
+      DeviceOrientation.portraitDown => 180,
+      DeviceOrientation.landscapeRight => 270,
+    };
+    return front ? (sensorOrientation + dev) % 360 : (sensorOrientation - dev + 360) % 360;
   }
 
   void _startSimulatedFrames() {
@@ -145,6 +194,7 @@ class CameraSource {
     _simTimer = null;
     final c = _controller;
     _controller = null;
+    _description = null;
     _usingRealCamera = false;
     if (c != null) {
       try {

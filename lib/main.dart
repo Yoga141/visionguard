@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
+import 'cv_engine/cv_providers.dart';
 import 'features/calibration/application/calibration_controller.dart';
 import 'features/monitoring/data/metrics_repository.dart';
 import 'features/monitoring/data/session_repository.dart';
@@ -12,16 +13,24 @@ import 'features/settings/application/settings_controller.dart';
 ///
 /// Urutan inisialisasi:
 /// 1. [WidgetsFlutterBinding] — agar binding Flutter siap.
-/// 2. Database lokal (DOCS_SPEC §12.3) — memuat pengaturan & kalibrasi
+/// 2. Pemilihan analyzer wajah: MediaPipe bila didukung, selain itu mode
+///    simulasi (Tahap D).
+/// 3. Database lokal (DOCS_SPEC §12.3) — memuat pengaturan & kalibrasi
 ///    tersimpan, menutup sesi yang tertinggal terbuka, dan menghapus metrik
 ///    > 30 hari, lalu menyiapkan notifikasi sistem pengingat.
-/// 3. [runApp] — menjalankan aplikasi di dalam [UncontrolledProviderScope]
+/// 4. [runApp] — menjalankan aplikasi di dalam [UncontrolledProviderScope]
 ///    agar semua provider Riverpod dapat diakses dari mana saja. Layar pertama
 ///    (splash) mencoba auto-login dari token tersimpan (`GET /me`).
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  final container = ProviderContainer();
+  final analyzer = await selectFaceAnalyzer();
+  final container = ProviderContainer(overrides: [
+    faceAnalyzerProvider.overrideWith((ref) {
+      ref.onDispose(analyzer.dispose);
+      return analyzer;
+    }),
+  ]);
   await prepareLocalData(container);
 
   runApp(UncontrolledProviderScope(container: container, child: const VisionGuardApp()));

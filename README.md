@@ -4,7 +4,7 @@ Aplikasi Flutter berbasis *computer vision* untuk deteksi dini dan pencegahan ke
 
 Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard v1.0.
 
-## Status: Tahap A–C (aplikasi tersambung ke backend)
+## Status: Tahap A–D (aplikasi tersambung ke backend, MediaPipe di Android)
 
 Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel ada di `backend/` (lihat
 `backend/README.md` dan `API_CONTRACT.md`) dan aplikasi memakainya **secara bawaan** sejak Tahap C.
@@ -21,9 +21,9 @@ Repository tiruan hanya untuk test dan `--dart-define=USE_REMOTE_API=false`. Det
 | KLB-03 | Focal length pada jarak acuan | ✅ selesai | + opsi lewati (FOV 60°) |
 | KLB-04 | Kalibrasi ulang & per kamera | ✅ selesai | `calibrations.camera_id` |
 | PMT-01 | Aktivasi Hari Pemantauan AI (kuota gratis / 1 kredit) | ✅ selesai | `POST /monitoring-days/activate` (§8.2 di server); 402 → tawarkan Beli atau Mode Timer |
-| PMT-02 | Deteksi kedipan & BR real-time | 🟡 sebagian | Rumus & pipeline selesai; landmark masih `DummyFaceAnalyzer` (MediaPipe belum) |
-| PMT-03 | Estimasi jarak real-time | 🟡 sebagian | Median iris 1 dtk selesai; landmark masih simulasi |
-| PMT-04 | PERCLOS & skor tiap 10 detik | 🟡 sebagian | Selesai di CV Engine; menunggu MediaPipe |
+| PMT-02 | Deteksi kedipan & BR real-time | 🟡 sebagian | `MediaPipeFaceAnalyzer` (Android/iOS); Windows & desktop lain → mode simulasi. Uji di HP asli belum |
+| PMT-03 | Estimasi jarak real-time | 🟡 sebagian | Iris 469↔471 / 474↔476 dari MediaPipe; uji penggaris 30/50/80 cm belum |
+| PMT-04 | PERCLOS & skor tiap 10 detik | 🟡 sebagian | Selesai di CV Engine; menunggu uji dengan wajah asli |
 | PMT-05 | Jeda saat wajah hilang > 10 detik | ✅ selesai | `SessionEvaluator` |
 | PMT-06 | Latar belakang (tray / foreground service) | ⏳ belum | |
 | PMT-07 | Sesi Cek Mata 2 menit (mobile) | ⏳ belum | |
@@ -96,11 +96,13 @@ lib/
 ├── cv_engine/                        # CV Engine (tanpa UI)
 │   ├── camera_source.dart            # CameraSource
 │   ├── face_analyzer.dart            # antarmuka FaceAnalyzer + Point2
-│   ├── dummy_face_analyzer.dart      # landmark sintetis (pengganti MediaPipe)
+│   ├── mediapipe_face_analyzer.dart  # MediaPipe Face Landmarker via tflite_flutter (Android/iOS)
+│   ├── face_mesh_geometry.dart       # BlazeFace anchor, ROI, sampling YUV/BGRA, landmark → piksel, yaw
+│   ├── dummy_face_analyzer.dart      # mode simulasi (fallback + test, opsi demo)
 │   ├── blink_analyzer.dart           # EAR, blink rate, PERCLOS
 │   ├── distance_estimator.dart       # d = f·D_iris / w_iris
 │   ├── fatigue_scorer.dart           # skor 0-100 & level
-│   └── cv_providers.dart             # provider Riverpod CV Engine
+│   └── cv_providers.dart             # provider + selectFaceAnalyzer (MediaPipe / fallback simulasi)
 ├── features/
 │   ├── auth/         (data, application, presentation) — login, auto-login, lupa sandi, hapus akun
 │   ├── onboarding/   (presentation)
@@ -115,12 +117,39 @@ lib/
 └── shared/widgets/                   # widget bersama (badge kamera aktif)
 test/
 ├── cv_engine_test.dart               # uji rumus EAR, jarak, skor
+├── mediapipe_face_analyzer_test.dart # konversi landmark sintetis, anchor, sampling, yaw, fallback
 ├── reminders_test.dart               # RuleEngine, TimerService, tunda/fokus, verifikasi istirahat
 ├── stats_test.dart                   # agregasi daily_summaries, sinkron/offline, halaman Statistik
 ├── credits_test.dart                 # aktivasi hari §8.2, ledger, halaman Kredit
 ├── ai_advice_card_test.dart          # kartu Saran AI
 └── ...                               # database, pengaturan, jaringan, widget
 ```
+
+## Deteksi Wajah (Tahap D)
+
+| Platform | Analyzer | Keterangan |
+|---|---|---|
+| Android | `MediaPipeFaceAnalyzer` | Image stream YUV420 (`camera_android_camerax`), target 10 fps |
+| iOS | `MediaPipeFaceAnalyzer` (belum diuji) | Image stream BGRA8888 |
+| Windows | `DummyFaceAnalyzer` — "Mode simulasi" | `camera_windows` 0.3.x belum menyediakan image stream (sempat ada di 0.2.5, dicabut di 0.2.6). Pratinjau kamera tetap asli, frame analisis tiruan. `tflite_flutter` di Windows juga butuh `libtensorflowlite_c-win.dll` manual |
+| macOS / lainnya | `DummyFaceAnalyzer` | Belum didukung |
+
+Pemilihan otomatis di `selectFaceAnalyzer()` (dipanggil `main.dart`): bila platform tidak
+didukung atau model gagal dimuat (batas 15 dtk), aplikasi memakai mode simulasi dan Dashboard
+menampilkan alasannya ("Mesin deteksi: Mode simulasi — …"). Opsi demo hanya ada di mode simulasi.
+
+**Model** (`assets/models/`), diekstrak tanpa diubah dari bundel resmi
+[`face_landmarker.task`](https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task)
+(MediaPipe Face Landmarker, float16; diunduh 23 Nov 2026, SHA-256 bundel `64184e22…bc9ff`):
+
+| Berkas | Isi | SHA-256 |
+|---|---|---|
+| `face_detector.tflite` | BlazeFace short range, input 128×128, output 896×16 + 896 | `b4578f35…0b152f` |
+| `face_landmarks_detector.tflite` | Face Mesh V2, input 256×256, output 478×3 + skor kehadiran | `c7d54204…bd43d5` |
+
+Sumber: Google MediaPipe — <https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker>.
+Lisensi: **Apache License 2.0** (model card MediaPipe Face Mesh V2 & BlazeFace). `face_blendshapes.tflite`
+dari bundel yang sama tidak dipakai. Runtime: `tflite_flutter` 0.12.1 (LiteRT 1.4.0, Apache 2.0).
 
 ## Catatan Privasi
 
