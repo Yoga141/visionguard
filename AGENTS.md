@@ -7,12 +7,13 @@ Instruksi tunggal untuk semua AI coding assistant (Claude Code, OpenCode, Antigr
 - **Baca `DOCS_SPEC.md` sebelum mengerjakan apa pun.** Dokumen itu adalah sumber kebenaran fitur, alur, database, API, dan aturan bisnis (diringkas dari SRS & SDD VisionGuard v1.0).
 - Jika kode bertentangan dengan `DOCS_SPEC.md`, **ikuti `DOCS_SPEC.md`**.
 - Jika suatu hal **belum diatur** di `DOCS_SPEC.md` atau termasuk **§16 (Inkonsistensi & Keputusan Terbuka)**, **tanyakan dulu** ke pengguna sebelum memutuskan.
+- **Baca `HANDOFF.md`** untuk arsitektur, cara menjalankan (Flutter, backend, uji Sandbox), akun demo, batasan yang diketahui, dan pekerjaan lanjutan berprioritas.
 - **Baca `ROADMAP.md`** untuk status progress, urutan tahap berikutnya (A–F), kriteria selesai, dan cara verifikasinya. Kerjakan satu tahap per sesi.
 - **Setiap akhir tahap, perbarui status di `ROADMAP.md`:** kolom status di tabel "Ringkasan tahap" dan baris `Status:` tahap itu (belum/sebagian/selesai), centang kriteria yang terpenuhi, dan isi satu baris "Catatan sesi".
 
 ## 2. Ringkasan proyek
 
-VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi dini kelelahan mata digital. Kamera dipakai untuk menghitung blink rate, PERCLOS, dan jarak wajah ke layar secara *on-device*, lalu digabung menjadi skor kelelahan 0–100 yang memicu pengingat. Backend Laravel + MySQL ada di folder `backend/` (Tahap A–B: akun, kredit, statistik, Saran AI, Midtrans, panel admin Filament, reset sandi).
+VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi dini kelelahan mata digital. Kamera dipakai untuk menghitung blink rate, PERCLOS, dan jarak wajah ke layar secara *on-device*, lalu digabung menjadi skor kelelahan 0–100 yang memicu pengingat. Backend Laravel + MySQL ada di folder `backend/` (akun, kredit, statistik, Saran AI, Midtrans, panel admin Filament, reset sandi). Tahap A–F sudah dikerjakan; sisa pekerjaan (uji perangkat, Sandbox, keputusan terbuka §16 #35–#36) ada di `HANDOFF.md` §7.
 
 ## 3. Stack
 
@@ -143,7 +144,7 @@ lib/
 │                         # application/stats_controller.dart (agregasi → sinkron → tren);
 │                         # presentation/statistics_page (S-08: tab Hari Ini & Tren, fl_chart)
 └── shared/
-    └── widgets/          # camera_active_badge.dart, coming_soon.dart, help_button.dart
+    └── widgets/          # camera_active_badge.dart, help_button.dart
                           # (ikon bantuan di AppBar setiap layar)
 ```
 

@@ -694,7 +694,7 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 5 | Pemetaan **sensitivitas Rendah/Sedang/Tinggi** ke faktor τ tidak ditentukan (hanya "0,7 × baseline, dapat diatur"). | **Keputusan pengguna (30 Okt 2026): Rendah = 0,65, Sedang = 0,70 (bawaan), Tinggi = 0,75** × baseline EAR. Makin tinggi τ, makin mudah mata dianggap tertutup. Konstanta di `cv_constants.dart` (`tauFactorLow`, `tauFactor`, `tauFactorHigh`); disimpan di `settings` kunci `sensitivity`. |
 | 6 | Penghalusan lebar iris: SDD DFD 3.5.3 = **median 1 detik**. | Implementasi wajib median 1 detik (bukan EMA). **Diterapkan** di `DistanceEstimator` (`CvConstants.irisMedianWindow`). |
 | 7 | Skor dihitung **tiap 10 detik** (PMT-04, Seq 4.22) dan bertipe **int**. | Jangan hitung skor per frame untuk keputusan pengingat. **Diterapkan:** `FatigueScorer.score` mengembalikan `int`; PERCLOS & skor dievaluasi tiap 10 detik oleh `SessionEvaluator` (BR & jarak tetap real-time); batas level 40/60 di `cv_constants.dart`. PMT-05 (#10) juga diterapkan: wajah tak terdeteksi > 10 detik → evaluasi & waktu layar dijeda. |
-| 8 | Path endpoint notifikasi Midtrans, logout, daftar paket, riwayat transaksi **tidak ditulis** di SDD (§11.2), padahal SRS 3.3 menyebut "seluruh endpoint dijelaskan di SDD". | Tetapkan path & format request/response, lalu perbarui SDD. **Ditetapkan** di `API_CONTRACT.md` (#20), kecuali notifikasi Midtrans (Tahap B). |
+| 8 | Path endpoint notifikasi Midtrans, logout, daftar paket, riwayat transaksi **tidak ditulis** di SDD (§11.2), padahal SRS 3.3 menyebut "seluruh endpoint dijelaskan di SDD". | Tetapkan path & format request/response, lalu perbarui SDD. **Ditetapkan** di `API_CONTRACT.md` (#20), kecuali notifikasi Midtrans (Tahap B). Notifikasi Midtrans: `POST /api/payments/midtrans/notification` (Tahap B). **Selesai.** |
 | 9 | Format JSON request/response tiap endpoint tidak dirinci di SDD. | Definisikan skema (mis. di `API_CONTRACT.md`) sebelum membangun backend. **Selesai:** `API_CONTRACT.md` disetujui pengguna (16 Nov 2026). |
 | 10 | PMT-05 (jeda saat wajah hilang > 10 detik) & PMT-06 (latar belakang) belum digambarkan di diagram. | Implementasikan sesuai tabel kebutuhan. **PMT-05 diterapkan** (`SessionEvaluator`, status "Wajah tidak terdeteksi" di Dashboard); **PMT-06 diterapkan di Tahap E** (lihat #32). |
 | 11 | KDL-02: di mobile pemantauan **berhenti saat layar mati**. | Pastikan foreground service berhenti saat layar off. **Diterapkan (Tahap E):** `MainActivity.kt` mengirim `ACTION_SCREEN_OFF` lewat EventChannel → `MonitoringController.stopForScreenOff()` (semua mode) → service ikut berhenti. |
@@ -721,12 +721,15 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 32 | PMT-06/S-11 tidak merinci perilaku tutup jendela, pengingat saat tersembunyi, Jeda/Lanjut, dan batas latar belakang Android. | **Diterapkan (Tahap E, 23 Nov 2026; paket & perilaku Android dipilih pengguna):** Windows: tutup jendela = sembunyi ke tray (sekali muncul notifikasi penjelasan), Keluar dari menu tray menutup sesi lalu keluar. Selama jendela tersembunyi / aplikasi mobile di latar (`appInBackgroundProvider`), pengingat **selalu** dikirim lewat notifikasi sistem walau notifikasi dimatikan di Pengaturan (pop-up tidak terlihat). **Jeda/Lanjut** (`pause`/`resume`) menutup baris `sessions` dan membuka yang baru saat lanjut, agar waktu jeda tidak dihitung sebagai waktu layar; tidak ada aktivasi ulang. Android: foreground service tipe `camera` hanya selama Mode AI berjalan (bukan Mode Timer/jeda), `stopWithTask`. **Batasan:** `camera_android_camerax` mengikat kamera ke lifecycle Activity, sehingga frame berhenti saat aplikasi tidak terlihat; pemantauan otomatis dijeda lewat PMT-05 dan kamera menyala lagi saat aplikasi kembali. Kamera di latar butuh implementasi native di service (ditunda). |
 | 33 | UC-11 tidak merinci cara menghitung BR/PERCLOS/skor sesi 2 menit, perilaku wajah tak terdeteksi, dan penyimpanan. | **Diterapkan:** BR = total kedipan ÷ durasi sesi; PERCLOS = frame valid dengan EAR < τ ÷ frame valid (seluruh sesi, bukan jendela 60 dtk); jarak = rata-rata; skor = `FatigueScorer` dengan T = durasi sesi (2 mnt). Frame valid < 70% → "wajah kurang terdeteksi", tidak disimpan. Butuh kalibrasi + Hari Pemantauan AI aktif (tombol aktivasi memakai §8.2). Pemantauan yang berjalan dihentikan dulu (kamera satu pemakai). Keluar halaman / aplikasi ke latar / tombol Batalkan sebelum selesai → batal, **tidak ada baris yang ditulis**. Selesai → `sessions(mode='check')` + 1 `metric_samples` (masuk ringkasan harian). Saran memakai kartu Saran AI (§17). |
 | 34 | PGT-02 tidak menentukan mekanisme autostart. | **Diterapkan:** Windows `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` nilai `VisionGuard` = `"<exe>" --autostart` lewat `reg.exe` (per pengguna, tanpa admin); `--autostart` → aplikasi langsung bersembunyi ke tray. Registri = sumber kebenaran; cermin di `settings` kunci `autostart`. `launch_at_startup` tidak dipakai (bentrok `win32` 6 dari `flutter_secure_storage`). macOS belum. |
+| 35 | KNR-03 meminta pengingat muncul ≤ **2 detik** setelah kondisi terpenuhi, tetapi PMT-04/Seq 4.22 memutuskan pengingat pada evaluasi **tiap 10 detik** (§16 #7, #17). | **Terbuka (temuan audit Tahap F).** Implementasi saat ini: pengingat AI tampil pada evaluasi 10 detik berikutnya setelah durasi kondisi terpenuhi (jeda ≤ 10 dtk); pengingat 20-20-20 Mode Timer diperiksa tiap detik. Rekomendasi: revisi KNR-03 menjadi "≤ 2 detik setelah evaluasi yang memenuhi kondisi", atau ubah keputusan pengingat menjadi per frame. Perlu keputusan pengguna. |
+| 36 | Pembelian kredit (konten digital yang dipakai di dalam aplikasi) lewat Midtrans di browser tidak dibahas terhadap kebijakan toko aplikasi. | **Terbuka (temuan audit Tahap F).** Kebijakan Pembayaran Google Play mewajibkan Google Play Billing untuk barang/layanan digital yang dibeli di aplikasi yang didistribusikan lewat Play; pedoman App Store 3.1.1 mewajibkan In-App Purchase. Midtrans aman untuk distribusi di luar toko (APK langsung, installer Windows §4.5) atau setelah memeriksa program sistem tagihan alternatif yang berlaku. Sebelum rilis toko: pilih Play Billing/IAP untuk build toko, atau distribusi di luar toko. Perlu keputusan pengguna. |
+| 37 | PML-01 meminta coverage ≥ 70% untuk modul CV & aturan kredit, termasuk server. | **Diukur (Tahap F, 23 Nov 2026):** Flutter `lib/cv_engine/` 77,5%, `lib/features/credits/` 88,7% (seluruh `lib/` 61,0%). Backend: 91 feature test lulus, tetapi coverage **tidak dapat diukur** karena PHP (Herd 8.5) tanpa Xdebug/PCOV; pasang salah satu lalu `php artisan test --coverage`. KNR-01/02, AKR-01/02, USB-01, KDL-02 (baterai) belum diukur karena butuh perangkat & data uji berlabel. |
 
 ---
 
 ## 17. Fitur Tambahan di Luar SRS/SDD v1.0 — Saran AI (Gemini)
 
-> **Status:** fitur tambahan atas keputusan pengguna (29 Okt 2026), **belum tercantum di SRS/SDD v1.0**. Bagian ini menjadi acuan sampai SRS/SDD direvisi. Endpoint di sini adalah **USULAN** dan perlu persetujuan.
+> **Status:** fitur tambahan atas keputusan pengguna (29 Okt 2026), **belum tercantum di SRS/SDD v1.0**. Bagian ini menjadi acuan sampai SRS/SDD direvisi (lihat §18). **Diterapkan:** server `POST /ai/advice` (Tahap A, kontrak disetujui 16 Nov 2026 di `API_CONTRACT.md`), klien memakainya secara bawaan sejak Tahap C. Isi bagian ini **belum** dipindahkan ke §4/§5/§10/§11 — menunggu persetujuan pengguna.
 
 ### 17.1 Tujuan
 - Memberi **2–3 saran singkat dan praktis** dalam Bahasa Indonesia untuk menjaga kesehatan mata, berdasarkan ringkasan metrik pemantauan.
@@ -746,14 +749,14 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 - Implementasi: `AdviceMetrics` di `lib/features/ai_assistant/data/ai_advice_repository.dart`.
 
 ### 17.3 Alur
-1. Pengguna meminta saran, misalnya dari Dashboard atau setelah Sesi Cek Mata (lokasi UI belum ditentukan).
+1. Pengguna menekan "Minta saran" pada kartu Saran AI: Dashboard (saat Mode AI), Statistik, dan hasil Sesi Cek Mata (Tahap E).
 2. App menyusun `AdviceMetrics` dari state pemantauan terakhir.
 3. `AiAdviceRepository.getAdvice(metrics)`:
-   - **Pengembangan** (`ApiConstants.useRemoteApi == false`): `DirectGeminiAdviceRepository` memanggil Gemini langsung dengan key dari `.env`.
+   - **Pengembangan** (`ApiConstants.useRemoteApi == false`, build debug): `DirectGeminiAdviceRepository` memanggil Gemini langsung dengan key dari `--dart-define=GEMINI_API_KEY` (bukan lagi `.env`).
    - **Final** (`useRemoteApi == true`): `ApiAiAdviceRepository` memanggil `POST /ai/advice` dengan token Sanctum. Server Laravel yang memanggil Gemini.
 4. Respons teks ditampilkan. Jika gagal, saran statis ditampilkan.
 
-### 17.4 Endpoint usulan — `POST /ai/advice` (🟡 USULAN, perlu persetujuan)
+### 17.4 Endpoint — `POST /ai/advice` (✅ diterapkan, kontrak disetujui)
 > Sudah dibangun di `backend/` (Tahap A) dengan batas 10/jam/pengguna, lihat §16 #22 dan `API_CONTRACT.md`. Sejak Tahap C klien memakainya secara bawaan.
 - Auth: token Sanctum.
 - Request:
@@ -764,7 +767,7 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 - Usulan kode error:
   - **401**: token tidak valid.
   - **422**: field tidak valid.
-  - **429**: batas pemakaian tercapai (kuota/rate limit per pengguna, nilainya belum ditentukan).
+  - **429**: batas pemakaian tercapai — **10 permintaan/jam/pengguna** (`AI_ADVICE_MAX_PER_HOUR`, §16 #22).
   - **503**: layanan AI tidak tersedia.
 
   Klien memakai saran statis untuk semua error.
@@ -778,7 +781,7 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
   1. Pemanggilan langsung **hanya untuk pengembangan lokal**; jangan distribusikan build yang memuat key.
   2. Batasi key di Google AI Studio/Cloud Console (kuota, pembatasan API).
   3. Rotasi key bila pernah ikut dalam build yang dibagikan.
-  4. Versi rilis **wajib** memakai `POST /ai/advice`, lalu `.env` dihapus dari asset.
+  4. Versi rilis **wajib** memakai `POST /ai/advice`, lalu `.env` dihapus dari asset. **Selesai (Tahap C).**
 
 ### 17.6 Revisi SRS/SDD yang diperlukan
 - **SRS**:
@@ -794,4 +797,35 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
   - Sequence diagram baru "Saran AI".
   - Daftar endpoint: `POST /ai/advice` (AiAdviceController).
   - Diagram kelas klien (Gambar 4.1): `AiAdviceRepository`.
-- **DOCS_SPEC.md**: setelah revisi disetujui, pindahkan isi §17 ke bagian terkait (§4.2, §5, §10, §11) dan hapus status "tambahan".
+- **DOCS_SPEC.md**: setelah revisi disetujui, pindahkan isi §17 ke bagian terkait (§4.2, §5, §10, §11) dan hapus status "tambahan". **Perlu persetujuan pengguna**; daftar lengkap revisi ada di §18.
+
+---
+
+## 18. Daftar Revisi SRS/SDD yang Disarankan (Tahap F, 23 Nov 2026)
+
+Ringkasan dari §16 & §17 agar SRS/SDD v1.1 sesuai implementasi. Kolom "Sumber" menunjuk butir §16.
+
+| # | Topik | Usulan revisi | Dokumen | Sumber |
+|---|---|---|---|---|
+| R1 | Diagram use case | Email ↔ Reset Kata Sandi, Admin ↔ Login; aktor Gambar 4 = Admin; Menghentikan Pemantauan tidak include aktivasi | SRS Gbr 1, 2, 4 | #1–#3 |
+| R2 | Saran AI (Gemini) | Kebutuhan baru `SAI-01..` (minta saran, fallback statis, batas 10/jam, gratis), UC "Meminta Saran AI", aktor Layanan AI; SDD Tabel 3.1, Gbr 2.1, sequence baru, kelas `AiAdviceRepository`; privasi: hanya angka ringkasan lewat server | SRS 3.3/3.4/4, SDD 2–4 | #14, #22, §17 |
+| R3 | Sensitivitas → τ | Rendah 0,65 · Sedang 0,70 (bawaan) · Tinggi 0,75 × baseline EAR | SRS PGT-01, SDD Tabel 2.4 | #5 |
+| R4 | Interval 20-20-20 | Dapat diatur 10–60 menit, bawaan 20 | SDD Tabel 2.6 | #4 |
+| R5 | Mode Fokus & interaksi pengingat | Durasi 30/60/90/120 mnt; cooldown dimulai saat tampil; kondisi jarak/BR terus-menerus; Oke memulai hitung mundur; aturan notifikasi vs pop-up; selama jendela tersembunyi selalu notifikasi | SRS PNG-06, SDD 2.5.4 | #16, #17, #32 |
+| R6 | Hasil verifikasi istirahat | `alerts.action` followed/dismissed sebagai hasil verifikasi (tanpa kolom baru) | SDD Tabel 3.9 | #15 |
+| R7 | Penghalusan & evaluasi | Median iris 1 dtk; skor `int` tiap 10 dtk; jeda wajah hilang > 10 dtk | SDD 2.5 | #6, #7, #10 |
+| R8 | KNR-03 vs evaluasi 10 dtk | Selaraskan ukuran "≤ 2 detik" dengan evaluasi 10 detik | SRS Tabel 5 | #35 (terbuka) |
+| R9 | Path endpoint final | `POST /auth/register`, `/auth/login`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`; `GET`/`DELETE /me`; `POST /monitoring-days/activate`; `GET /credits/status`, `/credits/history`, `/credit-packages`; `POST /orders`, `GET /orders/{order_code}`; `POST /payments/midtrans/notification`; `POST /stats/daily` (batch ≤ 31 hari), `GET /stats?range=7\|30`; `POST /ai/advice`. Web: `/payments/finish\|unfinish\|error`, `/payments/simulate/{order_code}`, `/reset-password/{token}`. Format JSON datar di `API_CONTRACT.md` | SDD daftar endpoint | #8, #9, #20, #26, #27 |
+| R10 | Skema server | `orders.created_at`; kolom sandi `password_hash`; FK `orders.package_id` RESTRICT; hapus akun = anonimkan order/ledger/monitoring_days | SDD Tabel 3.2–3.8 | #18, #19 |
+| R11 | Akun & keamanan | Sandi 8–72; `timezone` IANA; perangkat (user, platform, device_name); penahanan login per email+IP → 429 + `retry_after`; reset sandi lewat halaman web, cabut token | SRS AKN, KMN-02 | #21, #27 |
+| R12 | Statistik multi-perangkat | `GET /stats` menjumlahkan durasi/pengingat, rata-rata ditimbang `screen_minutes` | SDD 3.3 | #23 |
+| R13 | Midtrans | Model access key baru (Server Key otorisasi, Signature Secret Key verifikasi notifikasi); mode simulasi untuk demo (ditolak di produksi); aturan status & idempotensi | SDD 3.3, Seq 4.25 | #25, #26, #30 |
+| R14 | Pembayaran di toko aplikasi | Tentukan Play Billing/IAP untuk build toko atau distribusi di luar toko | SRS 2.1/KRD-02, SDD 3.2/4.5 | #36 (terbuka) |
+| R15 | Model CV | MediaPipe Face Landmarker (BlazeFace 128 + Face Mesh V2 256, 478 titik); yaw dari kedalaman pipi 234/454; indeks mata terverifikasi | SDD 2.5, Tabel 3.1 | #31 |
+| R16 | Dukungan platform CV | Windows memakai mode simulasi selama `camera_windows` tanpa image stream | SRS 2.4, PRT-01 | #31 |
+| R17 | Latar belakang | Tray Windows (tutup = sembunyi); foreground service Android hanya Mode AI; batasan kamera Android saat aplikasi tidak terlihat; layar mati → berhenti | SRS PMT-06, KDL-02 | #11, #32 |
+| R18 | Sesi Cek Mata | Rumus BR/PERCLOS/skor atas seluruh 2 menit, butuh hari aktif, batal tidak disimpan, `sessions.mode='check'` | SRS UC-11, SDD Seq | #33 |
+| R19 | Autostart | Registri `HKCU\…\Run` + `--autostart` (langsung ke tray) | SRS PGT-02 | #34 |
+| R20 | Integrasi klien | Persetujuan privasi per akun lokal; auto-login offline; halaman bayar di browser eksternal | SRS 3.1, UC-02/UC-19 | #29 |
+| R21 | Stack | Hapus Firebase; Laravel 13 + Filament 5; test SQLite in-memory | SDD Tabel 3.1 | #13, #24, #28 |
+| R22 | Pengukuran mutu | Prosedur uji KNR-01/02, AKR-01/02, USB-01, coverage backend (butuh Xdebug/PCOV) | SRS Tabel 5 | #37 |

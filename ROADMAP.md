@@ -3,7 +3,7 @@
 Panduan kerja untuk AI agent berikutnya (Claude Code, Antigravity, OpenCode, dll.).
 Dokumen ini **tidak** menggantikan `DOCS_SPEC.md`. Jika ada yang bertentangan, `DOCS_SPEC.md` yang berlaku.
 
-Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` + `backend/` Tahap A (belum di-commit). `lib/` dan `test/` tidak berubah sejak `3ba90c3`.
+Terakhir diperbarui: 23 November 2026 (Tahap F) · Basis: commit `bebc386` (Tahap E) + perubahan Tahap F (belum di-commit). Serah terima: `HANDOFF.md`.
 
 **Ringkasan tahap**
 
@@ -14,7 +14,7 @@ Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` + `backend/` Ta
 | [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — kode selesai, 167 test lulus, E2E API ke backend lokal lulus; tinggal uji manual UI (Windows) & beli paket di Sandbox |
 | [ ] **D** | Deteksi wajah asli (MediaPipe) | 🟡 sebagian — `MediaPipeFaceAnalyzer` (tflite_flutter 0.12.1) + fallback mode simulasi selesai, 191 test lulus, APK debug ter-build; tinggal uji di HP Android asli (kedip, jarak 30/50/80 cm, yaw, fps). Windows → mode simulasi (tanpa image stream) |
 | [ ] **E** | Latar belakang/system tray, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ | 🟡 sebagian — kode + 25 test baru (216 lulus) selesai; tinggal uji manual: tray & autostart di Windows (login ulang), foreground service, layar mati & Sesi Cek Mata di HP Android, kamera bentrok, CPU/RAM di tray |
-| [ ] **F** | Finalisasi + `HANDOFF.md` | ⏳ belum |
+| [ ] **F** | Finalisasi + `HANDOFF.md` | 🟡 sebagian — audit README (§5 & §6), `HANDOFF.md`, DOCS_SPEC §16 #35–#37 + §18, coverage Flutter CV 77,5 % / kredit 88,7 %, 216 + 91 test lulus; tertahan: coverage backend tidak terukur (tanpa Xdebug/PCOV) dan tahap B–E belum tercentang (uji manual) |
 
 Status: ⏳ belum · 🟡 sebagian · ✅ selesai. Perbarui kolom ini (dan `Status:` di tiap tahap) setiap akhir tahap.
 
@@ -338,7 +338,7 @@ Ukur CPU/RAM Windows saat di tray (Task Manager, target ≤ 15% / ≤ 300 MB, KN
 
 ### Tahap F — Finalisasi
 
-**Status:** ⏳ belum. `HANDOFF.md` belum ada; coverage belum pernah diukur. Selalu terakhir.
+**Status:** 🟡 sebagian (23 Nov 2026). Audit, coverage Flutter, perapian, dokumen, dan `HANDOFF.md` selesai. Belum selesai: coverage backend (PHP tanpa Xdebug/PCOV) dan kriteria "semua tahap tercentang" (B–E menunggu uji manual pengguna).
 
 **Tujuan:** memastikan semua kebutuhan terpenuhi, kode rapi, dokumen mutakhir, dan siap diserahkan.
 
@@ -353,11 +353,11 @@ Ukur CPU/RAM Windows saat di tray (Task Manager, target ≤ 15% / ≤ 300 MB, KN
 - Bersihkan: kode mati, TODO kedaluwarsa, `print`/`debugPrint` yang tidak perlu, opsi debug tetap di balik `kDebugMode`.
 
 **Kriteria selesai:**
-- [ ] Audit: tiap ID di DOCS_SPEC §5 punya status + bukti (berkas/test) di README. Yang tidak dikerjakan (mis. macOS/iOS) dicatat beserta alasannya.
-- [ ] Coverage ≥ 70% untuk `lib/cv_engine/` dan aturan kredit (`lib/features/credits/` + `backend` `MonitoringDayService`, `CreditAdjustmentService`, notifikasi pembayaran).
-- [ ] Pencarian privasi bersih: tidak ada penulisan frame/gambar ke disk/jaringan; tidak ada kolom BLOB/gambar.
-- [ ] `flutter analyze`, `flutter test`, `php artisan test` semuanya bersih.
-- [ ] `HANDOFF.md` ada dan semua tahap di ROADMAP tercentang.
+- [x] Audit: tiap ID di DOCS_SPEC §5 punya status + bukti (berkas/test) di README. Yang tidak dikerjakan (mis. macOS/iOS) dicatat beserta alasannya. *(Juga §6 non-fungsional.)*
+- [ ] Coverage ≥ 70% untuk `lib/cv_engine/` dan aturan kredit (`lib/features/credits/` + `backend` `MonitoringDayService`, `CreditAdjustmentService`, notifikasi pembayaran). *(Flutter ✅ 77,5 % / 88,7 %; backend tidak terukur tanpa Xdebug/PCOV.)*
+- [x] Pencarian privasi bersih: tidak ada penulisan frame/gambar ke disk/jaringan; tidak ada kolom BLOB/gambar.
+- [x] `flutter analyze`, `flutter test`, `php artisan test` semuanya bersih.
+- [ ] `HANDOFF.md` ada dan semua tahap di ROADMAP tercentang. *(`HANDOFF.md` ✅; B–E belum tercentang karena uji manual.)*
 
 **Cara verifikasi:**
 ```bash
@@ -409,3 +409,4 @@ Isi satu baris setiap akhir sesi (terbaru di bawah).
 | 2026-11-16 | B (perbaikan) | Model access key baru Midtrans: `MIDTRANS_SIGNATURE_SECRET_KEY` (verifikasi notifikasi, fallback Server Key + peringatan), Merchant ID opsional, `payments:check` tanpa peringatan karakter `~`/`.` & awalan G, saran 401 (izin Snap Checkout: Write, Core API: Read). Koreksi diagnosis sebelumnya: `~`/`.` di key bukan masalah. 91 test backend lulus | §16 #30 |
 | 2026-11-23 | D | Jalur `tflite_flutter` 0.12.1 + MediaPipe Face Landmarker dipilih pengguna. `MediaPipeFaceAnalyzer` (BlazeFace 128 → ROI berotasi → 478 landmark 256, pelacakan ROI dari landmark, `IsolateInterpreter`, sampling langsung YUV420/BGRA tanpa salinan ke disk), `face_mesh_geometry.dart`, rotasi sensor di `CameraFrame`, `selectFaceAnalyzer` (fallback "Mode simulasi — alasan"). Model + lisensi di README. 24 test baru (191 lulus), `flutter analyze` bersih, `flutter build apk --debug` berhasil. Perbaikan build: komentar XML `network_security_config.xml` (debug) berisi `--`; target JVM Kotlin `tflite_flutter` disamakan ke 11 di `android/build.gradle.kts` | §16 #31. Paket baru: `tflite_flutter`. Windows tetap simulasi (`camera_windows` 0.3.1 tanpa image stream). Belum diuji di HP: kedipan vs hitung manual, jarak 30/50/80 cm, yaw > 30°, fps; arah rotasi kamera depan juga perlu dicek (ada koreksi otomatis 0/180°) |
 | 2026-11-23 | E | Paket dipilih pengguna: `tray_manager` ^0.8.3 + `window_manager` ^0.6.0 (API native; versi baru butuh Flutter ≥ 3.50), `flutter_foreground_task` ^11.0.3; Android: service + jeda otomatis saat app tak terlihat. Dibuat `features/background/` (tray S-11, tutup jendela = sembunyi, pengingat via notifikasi saat tersembunyi, foreground service `camera`, layar mati → stop, autostart `reg.exe` + `--autostart`), `features/eye_check/` (S-07/UC-11), `features/help/` + ikon bantuan semua layar, Jeda/Lanjut, kamera bentrok → Mode Timer + coba ulang 60 dtk tanpa potong kredit. 25 test baru (216 lulus), `flutter analyze` bersih, `flutter build apk --debug` berhasil. `flutter build windows` terhenti (memori sistem hampir habis), belum terverifikasi | §16 #32–#34. `launch_at_startup` bentrok `win32` 6 → tidak dipakai. `MainActivity.kt` lama di `android/app/src/main/kotlin/com/yoga141/visionguard/` (tidak dipakai, namespace `id.ac.itk.visionguard`) sudah dihapus beserta folder kosongnya; `flutter analyze` bersih & `flutter build apk --debug` berhasil. Uji manual semua kriteria Tahap E + CPU/RAM di tray |
+| 2026-11-23 | F | Audit kebutuhan §5 & §6 di README (status jujur + lokasi kode); coverage `flutter test --coverage`: `lib/cv_engine/` 77,5 %, `lib/features/credits/` 88,7 %, `lib/` 61,0 % (tidak perlu test tambahan); backend 91 test lulus + Pint bersih, coverage tidak terukur (Herd PHP 8.5 tanpa Xdebug/PCOV). Perapian: `shared/widgets/coming_soon.dart` (tak terpakai) dihapus; pemindaian key/Server Key bersih; `.env` & `backend/.env` ter-ignore (hanya `.env.example` terlacak). DOCS_SPEC §16 #8 ditutup, #35–#37 baru, §17 diperbarui, §18 daftar revisi SRS/SDD. `HANDOFF.md` dibuat & dirujuk dari AGENTS.md. `flutter analyze` 0 issue, `flutter test` 216 lulus | Terbuka: §16 #35 (KNR-03 vs evaluasi 10 dtk), #36 (Play Billing/IAP). Isi §17 belum dipindah ke bagian utama (menunggu persetujuan). Pasang Xdebug/PCOV untuk coverage backend |

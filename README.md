@@ -4,49 +4,78 @@ Aplikasi Flutter berbasis *computer vision* untuk deteksi dini dan pencegahan ke
 
 Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard v1.0.
 
-## Status: Tahap A–E (backend, MediaPipe di Android, latar belakang & bantuan)
+## Status: audit Tahap F (23 Nov 2026)
 
-Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel ada di `backend/` (lihat
-`backend/README.md` dan `API_CONTRACT.md`) dan aplikasi memakainya **secara bawaan** sejak Tahap C.
-Repository tiruan hanya untuk test dan `--dart-define=USE_REMOTE_API=false`. Detail tahap: `ROADMAP.md`.
+Legenda: ✅ selesai (kode + test otomatis) · 🟡 sebagian (kode ada, uji manual/perangkat atau sebagian
+fitur belum) · ⏳ belum. Backend Laravel di `backend/` (lihat `backend/README.md`, `API_CONTRACT.md`);
+aplikasi memakainya secara bawaan. Detail tahap: `ROADMAP.md`. Serah terima: `HANDOFF.md`.
 
-| ID | Kebutuhan (DOCS_SPEC §5) | Status | Catatan |
+Verifikasi terakhir: `flutter analyze` 0 issue · `flutter test` 216 lulus · `php artisan test` 91 lulus ·
+Pint bersih · `flutter build apk --debug` berhasil. Coverage: `lib/cv_engine/` 77,5 %,
+`lib/features/credits/` 88,7 % (PML-01); coverage backend tidak terukur (PHP tanpa Xdebug/PCOV).
+
+### Kebutuhan fungsional (DOCS_SPEC §5)
+
+| ID | Status | Lokasi kode | Catatan |
 |---|---|---|---|
-| AKN-01 | Daftar dengan nama, email, kata sandi | ✅ selesai | `POST /auth/register`; 422 email terpakai ditampilkan per kolom |
-| AKN-02 | Login & logout | ✅ selesai | Token di secure storage, auto-login (`GET /me`), logout mencabut token; admin lewat Filament `/admin` |
-| AKN-03 | Reset kata sandi via email | ✅ selesai | Halaman "Lupa kata sandi" → `POST /auth/forgot-password` → tautan ke halaman web sandi baru |
-| AKN-04 | Hapus akun | ✅ selesai | Kata sandi → `DELETE /me` (403 bila salah) → semua data lokal dihapus → Login |
-| KLB-01 | Penjelasan privasi & izin kamera | ✅ selesai | S-02, penafian medis |
-| KLB-02 | Kalibrasi mata 10 detik (baseline EAR) | ✅ selesai | Median 10 dtk |
-| KLB-03 | Focal length pada jarak acuan | ✅ selesai | + opsi lewati (FOV 60°) |
-| KLB-04 | Kalibrasi ulang & per kamera | ✅ selesai | `calibrations.camera_id` |
-| PMT-01 | Aktivasi Hari Pemantauan AI (kuota gratis / 1 kredit) | ✅ selesai | `POST /monitoring-days/activate` (§8.2 di server); 402 → tawarkan Beli atau Mode Timer |
-| PMT-02 | Deteksi kedipan & BR real-time | 🟡 sebagian | `MediaPipeFaceAnalyzer` (Android/iOS); Windows & desktop lain → mode simulasi. Uji di HP asli belum |
-| PMT-03 | Estimasi jarak real-time | 🟡 sebagian | Iris 469↔471 / 474↔476 dari MediaPipe; uji penggaris 30/50/80 cm belum |
-| PMT-04 | PERCLOS & skor tiap 10 detik | 🟡 sebagian | Selesai di CV Engine; menunggu uji dengan wajah asli |
-| PMT-05 | Jeda saat wajah hilang > 10 detik | ✅ selesai | `SessionEvaluator` |
-| PMT-06 | Latar belakang (tray / foreground service) | 🟡 sebagian | Windows: tutup jendela → tray, menu S-11, pengingat via notifikasi. Android: foreground service `camera` + notifikasi permanen selama Mode AI; kamera berhenti saat aplikasi tak terlihat (batasan plugin, §16 #32). Belum diuji manual |
-| PMT-07 | Sesi Cek Mata 2 menit (mobile) | 🟡 sebagian | S-07: cek status hari → aktivasi → teks bacaan 2 mnt → skor + Saran AI; batal < 2 mnt tidak disimpan; `sessions.mode='check'`. Belum diuji di HP |
-| PMT-08 | Beralih ke Mode Timer | ✅ selesai | Offline & hari belum aktif → Timer; kamera dipakai app lain / izin ditolak → Timer + coba lagi tiap 60 dtk, kembali ke AI tanpa memotong kredit |
-| PNG-01 | Pengingat kedip | ✅ selesai | BR < 10 selama 3 mnt, cooldown 10 mnt |
-| PNG-02 | Pengingat jarak | ✅ selesai | < 50/30 cm selama 10 dtk, cooldown 5 mnt |
-| PNG-03 | Pengingat istirahat | ✅ selesai | Skor ≥ 60, cooldown 20 mnt |
-| PNG-04 | 20-20-20 + hitung mundur 20 dtk | ✅ selesai | Mode AI & Mode Timer |
-| PNG-05 | Verifikasi berpaling saat istirahat | ✅ selesai | ≥ 15 dari 20 dtk |
-| PNG-06 | Tunda 15/30/60 & Mode Fokus | ✅ selesai | Mode Fokus dari Dashboard (tray belum) |
-| PNG-07 | Cooldown per jenis | ✅ selesai | |
-| STK-01 | Ringkasan harian | ✅ selesai | S-08 tab "Hari Ini": durasi, rata-rata BR/jarak/skor, pengingat, kepatuhan istirahat |
-| STK-02 | Grafik tren 7 & 30 hari | ✅ selesai | `fl_chart`; "data belum cukup" bila < 2 hari |
-| STK-03 | Sinkron ringkasan ke server | ✅ selesai | `SyncService` → `POST /stats/daily` (batch); tren `GET /stats`; offline → data lokal |
-| KRD-01 | Kuota gratis, saldo, status hari ini | ✅ selesai | `GET /credits/status` (saldo dari ledger server) |
-| KRD-02 | Beli paket via Midtrans | 🟡 sebagian | `POST /orders` → halaman Snap di browser → "Muat ulang status"; uji Sandbox manual belum |
-| KRD-03 | Kredit bertambah setelah pembayaran | 🟡 sebagian | Server: notifikasi bersignature + idempoten; teruji otomatis & mode simulasi, Sandbox manual belum |
-| KRD-04 | Riwayat transaksi & pemakaian | ✅ selesai | `GET /credits/history` |
-| PGT-01 | Sensitivitas, jenis pengingat, interval | ✅ selesai | τ 0,65/0,70/0,75; interval 10–60 mnt |
-| PGT-02 | Autostart | 🟡 sebagian | Windows: toggle Pengaturan → `HKCU\…\Run` (`--autostart` → langsung ke tray). macOS belum. Belum diuji login ulang Windows |
-| ADM-01 | Admin kelola paket kredit | ✅ selesai | Filament `/admin` → Paket Kredit (paket pernah dibeli tidak bisa dihapus) |
-| ADM-02 | Admin lihat pengguna & transaksi | ✅ selesai | Filament → Transaksi (filter status & tanggal) dan Pengguna (saldo) |
-| ADM-03 | Admin sesuaikan kredit + alasan | ✅ selesai | Aksi "Sesuaikan kredit" (alasan wajib, saldo akhir ≥ 0) |
+| AKN-01 | ✅ | `features/auth/` (`login_page`, `api_auth_repository`), `backend` `AuthController` | 422 email terpakai per kolom; test `auth_controller_test`, `AuthTest` |
+| AKN-02 | ✅ | `auth_controller`, `token_storage`, `splash_page`; `backend` Sanctum, `LoginThrottle`; Filament `/admin` | Auto-login `GET /me`, penahanan 5× gagal → 5 mnt |
+| AKN-03 | ✅ | `forgot_password_page`; `backend` `PasswordResetService`, halaman `/reset-password/{token}` | Bawaan `MAIL_MAILER=log`; kirim lewat SMTP asli belum diuji |
+| AKN-04 | ✅ | `settings_page` (hapus akun), `local_data_cleaner`; `backend` `AccountService` | `DELETE /me` + hapus semua tabel lokal; ledger dianonimkan (§16 #19) |
+| KLB-01 | ✅ | `features/onboarding/privacy_onboarding_page.dart` | Privasi + penafian medis, tolak → Mode Timer |
+| KLB-02 | 🟡 | `calibration_controller.dart` | Median EAR 10 dtk teruji dengan data tiruan; belum dengan wajah asli |
+| KLB-03 | 🟡 | `calibration_controller`, `distance_estimator` | Focal pada 50/30 cm + lewati (FOV 60°); akurasi dengan wajah asli belum diuji |
+| KLB-04 | ✅ | `calibration_repository` (`camera_id`) | Kamera diganti → minta kalibrasi ulang |
+| PMT-01 | ✅ | `credit_controller`, `api_credit_repository`; `backend` `MonitoringDayService` | §8.2 di server (lock baris); 402 → beli / Mode Timer |
+| PMT-02 | 🟡 | `cv_engine/mediapipe_face_analyzer.dart`, `blink_analyzer.dart` | MediaPipe di Android/iOS, Windows mode simulasi; belum diuji di HP asli |
+| PMT-03 | 🟡 | `distance_estimator.dart` (median iris 1 dtk) | Uji penggaris 30/50/80 cm belum |
+| PMT-04 | 🟡 | `session_evaluator.dart`, `fatigue_scorer.dart` | Logika ✅ (tiap 10 dtk, int); menunggu uji wajah asli |
+| PMT-05 | ✅ | `session_evaluator.dart` | Wajah hilang > 10 dtk → dijeda |
+| PMT-06 | 🟡 | `features/background/` (`desktop_tray`, `foreground_service`, `background_coordinator`) | Tray Windows & foreground service Android ada; kamera Android berhenti saat app tak terlihat (§16 #32); belum diuji manual |
+| PMT-07 | 🟡 | `features/eye_check/` | Alur UC-11 + simpan `mode='check'` teruji otomatis; belum diuji di HP |
+| PMT-08 | ✅ | `monitoring_controller` (`_fallbackToTimerForCamera`, `retryCameraNow`), `camera_source` (`CameraFailure`) | Offline & hari belum aktif → Timer; kamera dipakai app lain → Timer + coba lagi 60 dtk |
+| PNG-01 | ✅ | `reminders/application/rule_engine.dart` | BR < 10 selama 3 mnt, cooldown 10 mnt |
+| PNG-02 | ✅ | `rule_engine.dart` | < 50/30 cm selama 10 dtk, cooldown 5 mnt |
+| PNG-03 | ✅ | `rule_engine.dart` | Skor ≥ 60, cooldown 20 mnt |
+| PNG-04 | ✅ | `timer_service.dart`, `reminder_controller.dart` | 20-20-20 + hitung mundur 20 dtk, Mode AI & Timer |
+| PNG-05 | ✅ | `break_verifier.dart` | ≥ 15/20 dtk berpaling; yaw asli dari MediaPipe belum diuji di perangkat |
+| PNG-06 | ✅ | `reminder_hold.dart`, Dashboard, menu tray | Tunda 15/30/60, Mode Fokus 30–120 (juga dari tray) |
+| PNG-07 | ✅ | `rule_engine.dart` | Cooldown per jenis, dimulai saat tampil |
+| STK-01 | ✅ | `metrics_repository.dailySummary`, `statistics_page` | Durasi, rata-rata BR/jarak/skor, pengingat, istirahat |
+| STK-02 | ✅ | `statistics_page` (`fl_chart`) | 7/30 hari, "data belum cukup" < 2 hari |
+| STK-03 | ✅ | `stats/application/sync_service.dart`; `backend` `StatsService` | Batch `POST /stats/daily`, offline → lokal |
+| KRD-01 | ✅ | `credits_page`, `GET /credits/status` | Saldo dari ledger server |
+| KRD-02 | 🟡 | `credit_controller.buy`; `backend` `OrderService`, `MidtransGateway` | Teruji otomatis & mode simulasi; transaksi Sandbox asli belum diuji manual |
+| KRD-03 | 🟡 | `backend` `PaymentNotificationService` | Signature SHA-512 + idempoten teruji otomatis; notifikasi Sandbox asli belum |
+| KRD-04 | ✅ | `credits_page`, `GET /credits/history` | Order + ledger |
+| PGT-01 | ✅ | `settings_controller`, `settings_page` | τ 0,65/0,70/0,75; interval 10–60 mnt; jenis pengingat |
+| PGT-02 | 🟡 | `background/data/autostart_service.dart`, `autostart_controller` | Windows (`HKCU\…\Run`); macOS belum; belum diuji login ulang |
+| ADM-01 | ✅ | `backend/app/Filament/Resources/CreditPackages` | Paket pernah dibeli tidak bisa dihapus |
+| ADM-02 | ✅ | Filament `Orders` (baca saja), `Users` | Filter status & tanggal |
+| ADM-03 | ✅ | Filament `Users` → "Sesuaikan kredit", `CreditAdjustmentService` | Alasan wajib, saldo akhir ≥ 0 |
+
+### Kebutuhan non-fungsional (DOCS_SPEC §6)
+
+| ID | Status | Lokasi / bukti | Catatan |
+|---|---|---|---|
+| KNR-01 | 🟡 | `camera_source.dart` (throttle 15/10 fps), `IsolateInterpreter` | fps nyata belum diukur |
+| KNR-02 | ⏳ | — | CPU/RAM di tray belum diukur |
+| KNR-03 | 🟡 | `monitoring_controller` (evaluasi 10 dtk) | Pengingat AI bisa tertunda ≤ 10 dtk (§16 #35, keputusan terbuka); latensi API belum diukur |
+| AKR-01 | ⏳ | — | Butuh data uji berlabel (precision/recall ≥ 90 %) |
+| AKR-02 | ⏳ | — | Uji jarak ±5 cm pada 30–80 cm belum |
+| PRV-01 | ✅ | `CameraFrame` hanya di memori; pencarian `writeAsBytes/toImage/MultipartFile/Blob` bersih | Tidak ada kolom BLOB/gambar |
+| PRV-02 | ✅ | `AccountService`, `LocalDataCleaner` | Server hanya akun, transaksi, statistik angka |
+| PRV-03 | ✅ | `camera_active_badge.dart` (Dashboard, menu lain, Sesi Cek Mata) | Indikator selalu tampil saat kamera menyala |
+| KMN-01 | 🟡 | `network_security_config.xml` (cleartext hanya debug/profile) | Release HTTPS saja; TLS server produksi belum dideploy |
+| KMN-02 | ✅ | `User` (`password_hash` hashed/bcrypt), Sanctum, `LoginThrottle` | 5× gagal → 429 5 mnt |
+| KMN-03 | ✅ | Saldo = `SUM(credit_ledger.delta)`; notifikasi bersignature | Klien tidak pernah menambah saldo |
+| USB-01 | ⏳ | — | Waktu onboarding + kalibrasi ≤ 3 mnt belum diukur |
+| USB-02 | ✅ | `reminder_popup.dart` (`ExcludeFocus`, satu klik) | |
+| PRT-01 | 🟡 | — | Android APK debug ✅; Windows ter-build hingga Tahap D, build setelah Tahap E belum terverifikasi; macOS/iOS butuh Mac |
+| KDL-01 | ✅ | `metrics_repository` (sampel 60 dtk), `closeDangling` | Data hilang ≤ 1 mnt |
+| KDL-02 | 🟡 | `MainActivity.kt` (layar mati), `stopForScreenOff` | Baterai ≤ 10 %/jam belum diukur |
+| PML-01 | 🟡 | `lib/cv_engine/` terpisah dari UI | Flutter CV 77,5 %, kredit 88,7 %; backend tidak terukur |
+| KSL-01 | ✅ | `privacy_onboarding_page.dart` | Penafian "bukan alat medis" |
 
 Fitur tambahan: **Saran AI** (§17) — kartu "Minta saran" di Dashboard (saat Mode AI) dan
 Statistik; lewat backend `POST /ai/advice` (key Gemini hanya di server), hanya angka ringkasan

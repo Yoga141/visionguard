@@ -6,7 +6,7 @@ Acuan: `../DOCS_SPEC.md` §8, §11, §12.2, §13.2, §17 dan kontrak JSON `../AP
 
 - Laravel 13, PHP ≥ 8.3, Laravel Sanctum (token API), MySQL 8, Filament 5 (panel admin `/admin`).
 - Tidak ada kolom gambar di tabel mana pun. Saldo kredit selalu `SUM(credit_ledger.delta)`.
-- Status: **Tahap A–B** selesai (lihat `../ROADMAP.md`).
+- Status: Tahap A–B dibangun, dipakai klien sejak Tahap C; audit Tahap F: 91 test lulus. Uji transaksi Sandbox asli belum (lihat `../ROADMAP.md`, `../HANDOFF.md`). Coverage butuh Xdebug/PCOV (belum terpasang di Herd).
 
 ## Instalasi (Windows, Laravel Herd + MySQL lokal)
 
