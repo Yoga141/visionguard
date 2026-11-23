@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router.dart';
 import '../application/auth_controller.dart';
 import 'post_login.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
 
 /// S-01 Login dan Registrasi (UC-01, UC-02).
 class LoginPage extends ConsumerStatefulWidget {
@@ -62,6 +64,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     final theme = Theme.of(context);
 
     return Scaffold(
+      appBar: AppBar(actions: const [HelpButton(topic: HelpTopic.akun)]),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(

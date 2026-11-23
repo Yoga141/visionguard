@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -15,6 +16,8 @@ import '../../credits/application/credit_controller.dart';
 import '../../credits/domain/credit_models.dart';
 import '../../reminders/application/reminder_controller.dart';
 import '../application/monitoring_controller.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
 
 /// S-04 Dashboard: tombol Mulai/Stop, BR, jarak, meteran skor, status kredit.
 class DashboardPage extends ConsumerWidget {
@@ -37,6 +40,7 @@ class DashboardPage extends ConsumerWidget {
             const CameraActiveBadge()
           else if (m.mode == MonitoringMode.ai)
             const Center(child: SimulationModeBadge()),
+          const HelpButton(topic: HelpTopic.dashboard),
           // Logout ada di halaman Pengaturan.
           PopupMenuButton<String>(
             onSelected: (v) async {
@@ -131,9 +135,13 @@ class DashboardPage extends ConsumerWidget {
 
   String _modeLabel(MonitoringState m) => switch (m.mode) {
         MonitoringMode.idle => 'Pemantauan belum berjalan.',
+        MonitoringMode.ai when m.paused => 'Pemantauan AI dijeda.',
         MonitoringMode.ai => m.facePaused
             ? 'Pemantauan AI dijeda — wajah tidak terdeteksi.'
             : 'Pemantauan AI berjalan.',
+        MonitoringMode.timer when m.paused => 'Mode Timer dijeda.',
+        MonitoringMode.timer when m.waitingForCamera =>
+          'Mode Timer 20-20-20 — menunggu kamera tersedia.',
         MonitoringMode.timer => 'Mode Timer 20-20-20 (tanpa kamera).',
       };
 }
@@ -382,11 +390,26 @@ class _StartStopButton extends StatelessWidget {
       return const FilledButton(onPressed: null, child: Text('Menyiapkan kamera...'));
     }
     if (state.mode != MonitoringMode.idle) {
-      return FilledButton.icon(
-        style: FilledButton.styleFrom(backgroundColor: AppTheme.lelah),
-        onPressed: ctrl.stop,
-        icon: const Icon(Icons.stop),
-        label: const Text('Stop'),
+      // Jeda/Lanjut juga tersedia di menu system tray (S-11).
+      return Row(
+        children: [
+          Expanded(
+            child: OutlinedButton.icon(
+              onPressed: state.paused ? ctrl.resume : ctrl.pause,
+              icon: Icon(state.paused ? Icons.play_arrow : Icons.pause),
+              label: Text(state.paused ? 'Lanjut' : 'Jeda'),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: FilledButton.icon(
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.lelah),
+              onPressed: ctrl.stop,
+              icon: const Icon(Icons.stop),
+              label: const Text('Stop'),
+            ),
+          ),
+        ],
       );
     }
     return Column(
@@ -403,6 +426,15 @@ class _StartStopButton extends StatelessWidget {
           icon: const Icon(Icons.timer),
           label: const Text('Mode Timer (tanpa kamera)'),
         ),
+        // S-07 Sesi Cek Mata hanya di ponsel (PMT-07).
+        if (isMobilePlatform) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: calibrated ? () => context.push(Routes.eyeCheck) : null,
+            icon: const Icon(Icons.chrome_reader_mode_outlined),
+            label: const Text('Sesi Cek Mata (2 menit)'),
+          ),
+        ],
       ],
     );
   }
@@ -432,6 +464,10 @@ class _CreditCard extends ConsumerWidget {
     );
   }
 }
+
+/// Ponsel (Android/iOS): Sesi Cek Mata tersedia.
+bool get isMobilePlatform =>
+    defaultTargetPlatform == TargetPlatform.android || defaultTargetPlatform == TargetPlatform.iOS;
 
 String _hhmm(DateTime t) =>
     '${t.hour.toString().padLeft(2, '0')}.${t.minute.toString().padLeft(2, '0')}';

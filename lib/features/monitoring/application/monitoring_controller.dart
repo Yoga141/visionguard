@@ -36,6 +36,9 @@ enum StartAiOutcome {
   insufficientCredit,
   /// Server tak terjangkau & hari belum aktif → sudah beralih ke Mode Timer.
   offlineTimerMode,
+  /// Kamera dipakai aplikasi lain / izin ditolak → Mode Timer + coba lagi
+  /// tiap 60 detik (UC-09 alur alternatif, PMT-08).
+  cameraUnavailable,
 }
 
 class MonitoringState {
@@ -73,6 +76,12 @@ class MonitoringState {
   /// [CvConstants.debugRule202020Min] menit.
   final bool fast202020;
 
+  /// Dijeda pengguna (tray / Dashboard): kamera & timer berhenti, mode tetap.
+  final bool paused;
+
+  /// Mode Timer karena kamera tidak bisa dibuka; dicoba lagi tiap 60 detik.
+  final bool waitingForCamera;
+
   final String? message;
 
   const MonitoringState({
@@ -95,6 +104,8 @@ class MonitoringState {
     this.simulatingFatigue = false,
     this.simulatingTooClose = false,
     this.fast202020 = false,
+    this.paused = false,
+    this.waitingForCamera = false,
     this.message,
   });
 
@@ -120,6 +131,8 @@ class MonitoringState {
     bool? simulatingFatigue,
     bool? simulatingTooClose,
     bool? fast202020,
+    bool? paused,
+    bool? waitingForCamera,
     String? message,
   }) =>
       MonitoringState(
@@ -142,6 +155,8 @@ class MonitoringState {
         simulatingFatigue: simulatingFatigue ?? this.simulatingFatigue,
         simulatingTooClose: simulatingTooClose ?? this.simulatingTooClose,
         fast202020: fast202020 ?? this.fast202020,
+        paused: paused ?? this.paused,
+        waitingForCamera: waitingForCamera ?? this.waitingForCamera,
         message: message ?? this.message,
       );
 
@@ -172,6 +187,11 @@ class MonitoringController extends Notifier<MonitoringState> {
   /// Detak 1 detik untuk TimerService (Mode AI & Mode Timer).
   Timer? _ticker;
   Timer? _sampleTimer;
+  /// Percobaan ulang kamera tiap [CvConstants.cameraRetryInterval] (PMT-08).
+  Timer? _cameraRetry;
+  /// Hari (lokal) saat Hari Pemantauan AI diaktifkan; dipakai agar kembali
+  /// ke Mode AI setelah kamera tersedia tidak memotong kredit lagi.
+  DateTime? _activatedDay;
   bool _busy = false;
   BlinkAnalyzer? _blink;
   DistanceEstimator? _distance;
@@ -211,6 +231,7 @@ class MonitoringController extends Notifier<MonitoringState> {
       _sub?.cancel();
       _ticker?.cancel();
       _sampleTimer?.cancel();
+      _cameraRetry?.cancel();
     });
     // Pengaturan langsung diterapkan tanpa restart (UC-21).
     ref.listen(settingsControllerProvider.select((s) => s.sensitivity), (_, next) {
@@ -264,6 +285,18 @@ class MonitoringController extends Notifier<MonitoringState> {
                     : 'Hari Pemantauan AI aktif (1 kredit terpakai).');
     }
 
+    _activatedDay = _today();
+    return _startAiPipeline();
+  }
+
+  static DateTime _today() {
+    final n = DateTime.now();
+    return DateTime(n.year, n.month, n.day);
+  }
+
+  /// Kamera + analisis setelah Hari Pemantauan AI aktif (tanpa aktivasi).
+  Future<StartAiOutcome> _startAiPipeline() async {
+    final calib = ref.read(calibrationControllerProvider);
     await _stopEverything();
     _blink = BlinkAnalyzer(baselineEar: calib.baselineEar!, tauFactor: _settings.sensitivity.tauFactor);
     _distance = DistanceEstimator(focalLengthPx: calib.focalLengthPx!);
@@ -272,10 +305,17 @@ class MonitoringController extends Notifier<MonitoringState> {
 
     await _analyzer.load();
     await _camera.start();
+    if (_cameraBlocked) {
+      await _camera.stop();
+      _fallbackToTimerForCamera();
+      return StartAiOutcome.cameraUnavailable;
+    }
     _sub = _camera.frames.listen(_onFrame);
     state = state.copyWith(
       mode: MonitoringMode.ai,
       starting: false,
+      paused: false,
+      waitingForCamera: false,
       cameraActive: _camera.usingRealCamera,
       usingRealCamera: _camera.streamingRealFrames,
       analyzerName: _analyzer.name,
@@ -286,6 +326,103 @@ class MonitoringController extends Notifier<MonitoringState> {
     _guard(_metrics.purgeOld);
     _sampleTimer = Timer.periodic(MetricsRepository.sampleInterval, (_) => saveSampleNow());
     return StartAiOutcome.started;
+  }
+
+  /// Kamera ada tetapi tidak bisa dibuka (dipakai aplikasi lain / izin ditolak).
+  bool get _cameraBlocked =>
+      _camera.failure == CameraFailure.unavailable || _camera.failure == CameraFailure.permissionDenied;
+
+  /// UC-09 alur alternatif: kamera dipakai aplikasi lain → Mode Timer, lalu
+  /// coba lagi tiap 60 detik.
+  void _fallbackToTimerForCamera() {
+    final denied = _camera.failure == CameraFailure.permissionDenied;
+    final seconds = CvConstants.cameraRetryInterval.inSeconds;
+    useTimerMode();
+    state = state.copyWith(
+      starting: false,
+      waitingForCamera: true,
+      message: denied
+          ? 'Izin kamera ditolak. Beralih ke Mode Timer; izinkan kamera, dicoba lagi tiap $seconds detik.'
+          : 'Kamera sedang dipakai aplikasi lain. Beralih ke Mode Timer; dicoba lagi tiap $seconds detik.',
+    );
+    _cameraRetry = Timer.periodic(CvConstants.cameraRetryInterval, (_) => retryCameraNow());
+  }
+
+  /// Satu percobaan ulang kamera (dipanggil timer; publik untuk test).
+  /// Berhasil di hari yang sama → kembali ke Mode AI tanpa memotong kredit.
+  @visibleForTesting
+  Future<bool> retryCameraNow() async {
+    if (!state.waitingForCamera || state.mode != MonitoringMode.timer) {
+      _cameraRetry?.cancel();
+      return false;
+    }
+    await _camera.start();
+    final ok = !_cameraBlocked;
+    await _camera.stop();
+    if (!ok) return false;
+    if (_activatedDay != _today()) {
+      // Hari berganti: aktivasi baru butuh tindakan pengguna (kuota/kredit).
+      _cameraRetry?.cancel();
+      state = state.copyWith(
+          waitingForCamera: false, message: 'Kamera tersedia lagi. Mulai Pemantauan AI untuk hari ini.');
+      return false;
+    }
+    final outcome = await _startAiPipeline();
+    if (outcome == StartAiOutcome.started) {
+      state = state.copyWith(message: 'Kamera tersedia lagi. Kembali ke Pemantauan AI.');
+    }
+    return outcome == StartAiOutcome.started;
+  }
+
+  /// Jeda (S-11 tray / Dashboard): kamera & waktu layar berhenti, sesi
+  /// ditutup; [resume] membuka sesi baru tanpa aktivasi ulang.
+  Future<void> pause() async {
+    if (state.mode == MonitoringMode.idle || state.paused) return;
+    _ticker?.cancel();
+    _ticker = null;
+    _sampleTimer?.cancel();
+    _sampleTimer = null;
+    _cameraRetry?.cancel();
+    _cameraRetry = null;
+    _reminders.closeActive();
+    if (state.mode == MonitoringMode.ai) await saveSampleNow();
+    await _sub?.cancel();
+    _sub = null;
+    await _camera.stop();
+    await _endSession();
+    state = state.copyWith(
+        paused: true, cameraActive: false, waitingForCamera: false, message: 'Pemantauan dijeda.');
+  }
+
+  Future<void> resume() async {
+    if (!state.paused) return;
+    final mode = state.mode;
+    if (mode == MonitoringMode.ai) {
+      await _camera.start();
+      if (_cameraBlocked) {
+        await _camera.stop();
+        _fallbackToTimerForCamera();
+        return;
+      }
+      _blink?.reset();
+      _distance?.reset();
+      _sub = _camera.frames.listen(_onFrame);
+      _sampleTimer = Timer.periodic(MetricsRepository.sampleInterval, (_) => saveSampleNow());
+    }
+    _beginSession(mode == MonitoringMode.ai ? SessionMode.ai : SessionMode.timer);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) => tickScreenTimer());
+    state = state.copyWith(
+      paused: false,
+      cameraActive: mode == MonitoringMode.ai && _camera.usingRealCamera,
+      message: 'Pemantauan dilanjutkan.',
+    );
+  }
+
+  /// KDL-02: layar mati di ponsel → pemantauan berhenti (hemat baterai).
+  Future<void> stopForScreenOff() async {
+    if (state.mode == MonitoringMode.idle) return;
+    await _stopEverything();
+    state = state.stopped(message: 'Pemantauan dihentikan karena layar mati.');
   }
 
   /// UC-12 Mode Timer 20-20-20 tanpa kamera (gratis tanpa batas).
@@ -445,6 +582,8 @@ class MonitoringController extends Notifier<MonitoringState> {
   }
 
   Future<void> _stopEverything() async {
+    _cameraRetry?.cancel();
+    _cameraRetry = null;
     final ending = _endSession();
     _sampleTimer?.cancel();
     _sampleTimer = null;

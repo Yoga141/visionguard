@@ -10,6 +10,8 @@ import '../../../core/database/app_database.dart';
 import '../../ai_assistant/data/ai_advice_repository.dart';
 import '../../ai_assistant/presentation/ai_advice_card.dart';
 import '../application/stats_controller.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
 
 /// S-08 Statistik: ringkasan hari ini (STK-01, UC-16) & grafik tren 7/30
 /// hari (STK-02, UC-17), dari database lokal.
@@ -33,6 +35,7 @@ class StatisticsPage extends ConsumerWidget {
         appBar: AppBar(
           title: const Text('Statistik'),
           actions: [
+            const HelpButton(topic: HelpTopic.statistik),
             if (kDebugMode)
               IconButton(
                 tooltip: 'Isi data contoh ${BusinessConstants.demoSeedDays} hari (debug)',

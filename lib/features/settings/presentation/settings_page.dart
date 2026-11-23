@@ -8,6 +8,9 @@ import '../../../core/constants/cv_constants.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../monitoring/application/monitoring_controller.dart';
 import '../application/settings_controller.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
+import '../../background/application/autostart_controller.dart';
 
 /// S-10 Pengaturan (PGT-01, PGT-02, UC-21, AKN-02, AKN-04).
 /// Setiap perubahan langsung disimpan ke tabel `settings` dan diterapkan.
@@ -91,7 +94,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         );
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Pengaturan')),
+      appBar: AppBar(
+        title: const Text('Pengaturan'),
+        actions: const [HelpButton(topic: HelpTopic.pengaturan)],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -191,15 +197,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   ),
                 ),
                 section('Sistem'),
-                const Card(
-                  child: SwitchListTile(
-                    secondary: Icon(Icons.power_settings_new),
-                    title: Text('Jalankan saat komputer menyala'),
-                    subtitle: Text('Segera hadir'),
-                    value: false,
-                    onChanged: null, // PGT-02 belum diimplementasikan
-                  ),
-                ),
+                const _AutostartTile(),
                 const SizedBox(height: 8),
                 OutlinedButton.icon(
                   onPressed: _resetDefaults,
@@ -308,6 +306,40 @@ class _DeleteAccountDialogState extends State<DeleteAccountDialog> {
           child: const Text('Hapus Akun'),
         ),
       ],
+    );
+  }
+}
+
+/// PGT-02: jalankan saat komputer menyala (Windows; aplikasi terbuka di tray).
+class _AutostartTile extends ConsumerStatefulWidget {
+  const _AutostartTile();
+
+  @override
+  ConsumerState<_AutostartTile> createState() => _AutostartTileState();
+}
+
+class _AutostartTileState extends ConsumerState<_AutostartTile> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => ref.read(autostartControllerProvider.notifier).load());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = ref.watch(autostartControllerProvider);
+    return Card(
+      child: SwitchListTile(
+        secondary: const Icon(Icons.power_settings_new),
+        title: const Text('Jalankan saat komputer menyala'),
+        subtitle: Text(!a.supported
+            ? 'Hanya tersedia di aplikasi desktop Windows.'
+            : a.error ?? 'VisionGuard terbuka di system tray setelah masuk Windows.'),
+        value: a.enabled,
+        onChanged: !a.supported || a.busy
+            ? null
+            : (v) => ref.read(autostartControllerProvider.notifier).setEnabled(v),
+      ),
     );
   }
 }

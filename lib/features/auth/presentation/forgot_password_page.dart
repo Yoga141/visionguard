@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../app/router.dart';
 import '../application/auth_controller.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
 
 /// UC-03 Lupa kata sandi (bagian S-01). Server mengirim email berisi tautan
 /// ke halaman web untuk membuat sandi baru (berlaku 60 menit).
@@ -61,6 +63,7 @@ class _ForgotPasswordPageState extends ConsumerState<ForgotPasswordPage> {
       appBar: AppBar(
         title: const Text('Lupa kata sandi'),
         leading: BackButton(onPressed: () => context.go(Routes.login)),
+        actions: const [HelpButton(topic: HelpTopic.akun)],
       ),
       body: SafeArea(
         child: Center(

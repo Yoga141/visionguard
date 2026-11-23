@@ -6,6 +6,8 @@ import '../../../app/theme.dart';
 import '../../../core/constants/business_constants.dart';
 import '../application/credit_controller.dart';
 import '../domain/credit_models.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
 
 /// S-09 Kredit & Pembayaran: kuota gratis, saldo, status hari ini (KRD-01,
 /// UC-18), paket kredit (UC-19), riwayat transaksi & pemakaian (KRD-04, UC-20).
@@ -50,6 +52,7 @@ class _CreditsPageState extends ConsumerState<CreditsPage> {
         appBar: AppBar(
           title: const Text('Kredit'),
           actions: [
+            const HelpButton(topic: HelpTopic.kredit),
             if (kDebugMode && ctrl.canAddDemoCredit)
               IconButton(
                 tooltip: 'Tambah 1 kredit (debug)',

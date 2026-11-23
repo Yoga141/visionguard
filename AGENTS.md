@@ -27,6 +27,7 @@ VisionGuard adalah aplikasi Flutter (Windows, macOS, Android, iOS) untuk deteksi
 - **Notifikasi pengingat:** `flutter_local_notifications` 22.x (Windows & Android, aksi Tunda). Gagal/tidak didukung/izin ditolak → pop-up dalam aplikasi. Android memakai *core library desugaring* & izin `POST_NOTIFICATIONS`.
 - **Grafik:** `fl_chart` 1.x (tren 7/30 hari di halaman Statistik).
 - **Deteksi wajah (Tahap D):** `tflite_flutter` 0.12.x (LiteRT) + model MediaPipe Face Landmarker di `assets/models/` (`face_detector.tflite`, `face_landmarks_detector.tflite`; sumber & lisensi di README). Android/iOS → `MediaPipeFaceAnalyzer`; Windows/macOS → `DummyFaceAnalyzer` ("Mode simulasi", `camera_windows` tanpa image stream). Pemilihan di `selectFaceAnalyzer()` (`main.dart` meng-override `faceAnalyzerProvider`).
+- **Latar belakang (Tahap E):** `tray_manager` 0.8.x + `window_manager` 0.6.x (API native `nativeapi`; API lama `legacy.dart` deprecated, jangan dipakai) untuk tray Windows; `flutter_foreground_task` 11.x untuk foreground service Android (tipe `camera`). Autostart Windows lewat `reg.exe` (`HKCU\...\Run`), bukan `launch_at_startup` (bentrok `win32` 6). Status layar Android lewat EventChannel `visionguard/screen_state` di `MainActivity.kt`.
 - **Firebase tidak dipakai** (DOCS_SPEC §16 #13). Jangan menambahkannya kembali tanpa izin.
 
 ## 4. Struktur
@@ -90,6 +91,19 @@ lib/
 │   │                     # data/api_ai_advice_repository.dart (POST /ai/advice, bawaan),
 │   │                     # application/ai_advice_provider.dart,
 │   │                     # presentation/ai_advice_card.dart (kartu "Minta saran", Dashboard & Statistik)
+│   ├── background/       # Tahap E (PMT-06, S-11, PGT-02, KDL-02): application/app_visibility
+│   │                     # (appInBackgroundProvider → pengingat lewat notifikasi), tray_menu (model
+│   │                     # menu murni), tray_actions (Jeda/Lanjut, Fokus, Logout), background_coordinator
+│   │                     # (Mode AI → foreground service; layar mati → stopForScreenOff),
+│   │                     # autostart_controller; data/foreground_service (gateway + Android),
+│   │                     # screen_state (EventChannel), autostart_service (WindowsAutostart);
+│   │                     # presentation/desktop_tray (TrayIcon + tutup jendela = sembunyi)
+│   ├── eye_check/        # S-07/UC-11 (mobile): application/eye_check_session (BR/PERCLOS/jarak
+│   │                     # atas seluruh 2 mnt), eye_check_controller (status hari → aktivasi →
+│   │                     # 2 mnt → simpan sessions.mode='check' + 1 metric_samples; batal → tanpa
+│   │                     # tulis); presentation/eye_check_page (teks bacaan, hasil + Saran AI)
+│   ├── help/             # domain/help_content (FAQ §7.5, angka dari konstanta),
+│   │                     # presentation/help_page (rute publik /help?topic=)
 │   ├── auth/             # data/auth_repository (kontrak + Fake: login, register, restoreSession,
 │   │                     # forgotPassword, deleteAccount, logout), api_auth_repository,
 │   │                     # session_store (settings: device_id, profil terakhir, privasi per akun);
@@ -129,12 +143,15 @@ lib/
 │                         # application/stats_controller.dart (agregasi → sinkron → tren);
 │                         # presentation/statistics_page (S-08: tab Hari Ini & Tren, fl_chart)
 └── shared/
-    └── widgets/          # camera_active_badge.dart, coming_soon.dart
+    └── widgets/          # camera_active_badge.dart, coming_soon.dart, help_button.dart
+                          # (ikon bantuan di AppBar setiap layar)
 ```
 
-Test ada di `test/` (`cv_engine_test.dart`, `mediapipe_face_analyzer_test.dart`, `network_test.dart`, `api_integration_test.dart`, `auth_controller_test.dart`, `ai_advice_test.dart`, `ai_advice_card_test.dart`, `database_test.dart`, `local_storage_flow_test.dart`, `settings_test.dart`, `reminders_test.dart`, `stats_test.dart`, `credits_test.dart`, `widget_test.dart`). Test kredit meng-override `creditRepositoryProvider` (`FakeCreditRepository` dengan jam tiruan); test statistik meng-override `statsRepositoryProvider` dan `statsClockProvider`. Test pengingat memakai `FakeNotifier` (override `systemNotifierProvider`) dan jam tiruan (override `reminderClockProvider`). Test database memakai SQLite in-memory (`AppDatabase(NativeDatabase.memory())`, override `appDatabaseProvider`). Test repository API memakai Dio dengan adapter tiruan (`RouteAdapter` di `api_integration_test.dart`), tanpa server sungguhan. Test yang memakai `AuthController`/`SessionStore` wajib meng-override `appDatabaseProvider` (database di disk tidak bisa dibuka saat test).
+Test ada di `test/` (`cv_engine_test.dart`, `mediapipe_face_analyzer_test.dart`, `background_test.dart`, `eye_check_test.dart`, `help_test.dart`, `network_test.dart`, `api_integration_test.dart`, `auth_controller_test.dart`, `ai_advice_test.dart`, `ai_advice_card_test.dart`, `database_test.dart`, `local_storage_flow_test.dart`, `settings_test.dart`, `reminders_test.dart`, `stats_test.dart`, `credits_test.dart`, `widget_test.dart`). Test kredit meng-override `creditRepositoryProvider` (`FakeCreditRepository` dengan jam tiruan); test statistik meng-override `statsRepositoryProvider` dan `statsClockProvider`. Test pengingat memakai `FakeNotifier` (override `systemNotifierProvider`) dan jam tiruan (override `reminderClockProvider`). Test database memakai SQLite in-memory (`AppDatabase(NativeDatabase.memory())`, override `appDatabaseProvider`). Test repository API memakai Dio dengan adapter tiruan (`RouteAdapter` di `api_integration_test.dart`), tanpa server sungguhan. Test yang memakai `AuthController`/`SessionStore` wajib meng-override `appDatabaseProvider` (database di disk tidak bisa dibuka saat test).
 
 **Alur pengingat:** `MonitoringController` memanggil `RuleEngine.evaluate` tiap evaluasi 10 detik `SessionEvaluator` (Mode AI) atau tiap detak `TimerService` saat 20-20-20 jatuh tempo (Mode Timer) → `ReminderController.show` (hanya satu sekaligus; ditolak saat Tunda/Mode Fokus, dan cooldown baru dimulai bila benar-benar tampil). Pop-up dipasang di `MaterialApp.builder` (`ReminderOverlay`). Opsi demo (simulasi mata lelah, simulasi terlalu dekat, percepat 20-20-20 ke 1 menit) hanya tampil dengan `DummyFaceAnalyzer`.
+
+**Alur latar belakang:** `main.dart` membaca `backgroundCoordinatorProvider` dan (Windows) `DesktopTray.init`. `MonitoringController` punya `pause()`/`resume()` (sesi ditutup & dibuka lagi, tanpa aktivasi ulang), `stopForScreenOff()`, dan PMT-08: `CameraSource.failure` `unavailable`/`permissionDenied` → `useTimerMode` + `waitingForCamera` + `retryCameraNow` tiap `CvConstants.cameraRetryInterval` (hari sama → `_startAiPipeline` tanpa `activateToday`). Test meng-override `cameraSourceProvider` (`FakeCameraSource`), `foregroundServiceProvider`, `screenEventsProvider`, `autostartServiceProvider`. Di bawah `flutter test` service Android, status layar, dan autostart otomatis no-op.
 
 **Alur kredit:** `MonitoringController.startAi` → `CreditController.activateToday` → `CreditRepository.activateToday` (§8.2: hari sudah aktif → tidak memotong; kuota gratis bulan berjalan; kredit −1 di ledger; habis → `ActivationInsufficient`, Dashboard menawarkan beli kredit atau Mode Timer; error/offline → Mode Timer). Jangan menaruh logika kuota/saldo di controller UI; saldo selalu dari ledger server (§15.5).
 

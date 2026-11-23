@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../../../app/router.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../monitoring/application/monitoring_controller.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
 
 /// S-02 Onboarding Privasi (UC-06, KLB-01, KSL-01).
 class PrivacyOnboardingPage extends ConsumerStatefulWidget {
@@ -38,7 +40,10 @@ class _PrivacyOnboardingPageState extends ConsumerState<PrivacyOnboardingPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Privasi & Izin Kamera')),
+      appBar: AppBar(
+        title: const Text('Privasi & Izin Kamera'),
+        actions: const [HelpButton(topic: HelpTopic.umum)],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

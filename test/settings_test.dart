@@ -137,11 +137,12 @@ void main() {
       final c = await pumpPage(tester);
       for (final t in [
         'Rendah', 'Sedang', 'Tinggi', 'Pop-up', 'Notifikasi', 'Suara', //
-        'Kembalikan ke bawaan', 'Logout', 'Hapus Akun', 'Segera hadir',
+        'Kembalikan ke bawaan', 'Logout', 'Hapus Akun',
+        'Hanya tersedia di aplikasi desktop Windows.',
       ]) {
         expect(find.text(t), findsOneWidget, reason: t);
       }
-      // Autostart tampil tetapi nonaktif.
+      // Autostart (PGT-02) hanya di Windows; di platform lain tampil nonaktif.
       final autostart = tester.widget<SwitchListTile>(
           find.widgetWithText(SwitchListTile, 'Jalankan saat komputer menyala'));
       expect(autostart.onChanged, isNull);

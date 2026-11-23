@@ -6,6 +6,12 @@
          Release hanya mengizinkan HTTPS (KMN-01); http:// lokal hanya untuk debug/profile,
          lihat src/debug & src/profile res/xml/network_security_config.xml. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Kamera depan untuk Pemantauan AI & Sesi Cek Mata (DOCS_SPEC §4.4) -->
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Foreground service + notifikasi permanen selama Mode AI (PMT-06, Tahap E).
+         Tipe camera wajib di Android 14+. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
     <application
         android:label="visionguard"
         android:name="${applicationName}"
@@ -32,6 +38,13 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Foreground service flutter_foreground_task (jangan ganti nama). Berhenti
+             bersama task aplikasi; dihentikan juga saat layar mati (KDL-02). -->
+        <service
+            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
+            android:foregroundServiceType="camera"
+            android:stopWithTask="true"
+            android:exported="false" />
         <!-- Aksi notifikasi (Tunda) dari flutter_local_notifications -->
         <receiver
             android:exported="false"

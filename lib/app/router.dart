@@ -7,6 +7,9 @@ import '../features/auth/presentation/login_page.dart';
 import '../features/auth/presentation/splash_page.dart';
 import '../features/calibration/presentation/calibration_page.dart';
 import '../features/credits/presentation/credits_page.dart';
+import '../features/eye_check/presentation/eye_check_page.dart';
+import '../features/help/domain/help_content.dart';
+import '../features/help/presentation/help_page.dart';
 import '../features/monitoring/presentation/dashboard_page.dart';
 import '../features/onboarding/presentation/privacy_onboarding_page.dart';
 import '../features/settings/presentation/settings_page.dart';
@@ -24,9 +27,11 @@ class Routes {
   static const statistics = '/statistics'; // S-08
   static const credits = '/credits'; // S-09
   static const settings = '/settings'; // S-10
+  static const eyeCheck = '/eye-check'; // S-07 (mobile)
+  static const help = '/help'; // Bantuan & FAQ (SRS 2.6)
 
   /// Rute yang boleh dibuka tanpa login.
-  static const public = {splash, login, forgotPassword};
+  static const public = {splash, login, forgotPassword, help};
 }
 
 final routerProvider = Provider<GoRouter>((ref) {
@@ -58,6 +63,16 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: Routes.calibration,
         builder: (context, state) => const CalibrationPage(),
+      ),
+      GoRoute(
+        path: Routes.eyeCheck,
+        builder: (context, state) => const EyeCheckPage(),
+      ),
+      GoRoute(
+        path: Routes.help,
+        builder: (context, state) => HelpPage(
+          topic: HelpTopic.values.asNameMap()[state.uri.queryParameters['topic']] ?? HelpTopic.umum,
+        ),
       ),
       // Menu utama (DOCS_SPEC §7.4); tiap tab mempertahankan state-nya.
       StatefulShellRoute.indexedStack(

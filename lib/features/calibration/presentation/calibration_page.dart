@@ -9,6 +9,8 @@ import '../../../cv_engine/cv_providers.dart';
 import '../../../shared/widgets/camera_active_badge.dart';
 import '../../settings/application/settings_controller.dart';
 import '../application/calibration_controller.dart';
+import '../../../shared/widgets/help_button.dart';
+import '../../help/domain/help_content.dart';
 
 /// S-03 Kalibrasi (UC-07 Kalibrasi Mata, UC-08 Kalibrasi Jarak).
 class CalibrationPage extends ConsumerStatefulWidget {
@@ -46,6 +48,7 @@ class _CalibrationPageState extends ConsumerState<CalibrationPage> {
       appBar: AppBar(
         title: const Text('Kalibrasi'),
         actions: [
+          const HelpButton(topic: HelpTopic.kalibrasi),
           if (s.usingRealCamera)
             const Padding(padding: EdgeInsets.only(right: 12), child: CameraActiveBadge())
           else if (s.step != CalibrationStep.idle && s.step != CalibrationStep.preparing)

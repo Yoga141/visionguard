@@ -1,8 +1,13 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'app/app.dart';
 import 'cv_engine/cv_providers.dart';
+import 'features/background/application/background_coordinator.dart';
+import 'features/background/data/autostart_service.dart';
+import 'features/background/presentation/desktop_tray.dart';
 import 'features/calibration/application/calibration_controller.dart';
 import 'features/monitoring/data/metrics_repository.dart';
 import 'features/monitoring/data/session_repository.dart';
@@ -18,11 +23,16 @@ import 'features/settings/application/settings_controller.dart';
 /// 3. Database lokal (DOCS_SPEC §12.3) — memuat pengaturan & kalibrasi
 ///    tersimpan, menutup sesi yang tertinggal terbuka, dan menghapus metrik
 ///    > 30 hari, lalu menyiapkan notifikasi sistem pengingat.
-/// 4. [runApp] — menjalankan aplikasi di dalam [UncontrolledProviderScope]
+/// 4. Latar belakang: foreground service Android + layar mati (KDL-02) dan
+///    system tray Windows (S-11); argumen `--autostart` → langsung ke tray.
+/// 5. [runApp] — menjalankan aplikasi di dalam [UncontrolledProviderScope]
 ///    agar semua provider Riverpod dapat diakses dari mana saja. Layar pertama
 ///    (splash) mencoba auto-login dari token tersimpan (`GET /me`).
-void main() async {
+void main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  final mobile = defaultTargetPlatform == TargetPlatform.android ||
+      defaultTargetPlatform == TargetPlatform.iOS;
+  if (defaultTargetPlatform == TargetPlatform.android) FlutterForegroundTask.initCommunicationPort();
 
   final analyzer = await selectFaceAnalyzer();
   final container = ProviderContainer(overrides: [
@@ -30,8 +40,16 @@ void main() async {
       ref.onDispose(analyzer.dispose);
       return analyzer;
     }),
+    trackMobileLifecycleProvider.overrideWithValue(mobile),
   ]);
   await prepareLocalData(container);
+
+  // Latar belakang (Tahap E): foreground service Android & layar mati,
+  // system tray Windows. Autostart (--autostart) langsung ke tray.
+  container.read(backgroundCoordinatorProvider);
+  if (DesktopTray.supported) {
+    await DesktopTray(container).init(startHidden: args.contains(autostartArg));
+  }
 
   runApp(UncontrolledProviderScope(container: container, child: const VisionGuardApp()));
 }

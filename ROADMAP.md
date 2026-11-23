@@ -13,7 +13,7 @@ Terakhir diperbarui: 16 November 2026 · Basis: commit `aca273a` + `backend/` Ta
 | [ ] **B** | Midtrans Sandbox, panel admin Filament, reset kata sandi via email | 🟡 sebagian — kode + 79 feature test selesai; tinggal uji manual Sandbox dengan key milik pengguna |
 | [ ] **C** | Integrasi Flutter ke backend | 🟡 sebagian — kode selesai, 167 test lulus, E2E API ke backend lokal lulus; tinggal uji manual UI (Windows) & beli paket di Sandbox |
 | [ ] **D** | Deteksi wajah asli (MediaPipe) | 🟡 sebagian — `MediaPipeFaceAnalyzer` (tflite_flutter 0.12.1) + fallback mode simulasi selesai, 191 test lulus, APK debug ter-build; tinggal uji di HP Android asli (kedip, jarak 30/50/80 cm, yaw, fps). Windows → mode simulasi (tanpa image stream) |
-| [ ] **E** | Latar belakang/system tray, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ | ⏳ belum |
+| [ ] **E** | Latar belakang/system tray, Sesi Cek Mata, autostart, kamera bentrok, bantuan & FAQ | 🟡 sebagian — kode + 25 test baru (216 lulus) selesai; tinggal uji manual: tray & autostart di Windows (login ulang), foreground service, layar mati & Sesi Cek Mata di HP Android, kamera bentrok, CPU/RAM di tray |
 | [ ] **F** | Finalisasi + `HANDOFF.md` | ⏳ belum |
 
 Status: ⏳ belum · 🟡 sebagian · ✅ selesai. Perbarui kolom ini (dan `Status:` di tiap tahap) setiap akhir tahap.
@@ -303,7 +303,7 @@ Catat fps, hasil uji jarak, dan jumlah kedipan terdeteksi vs dihitung manual (1 
 
 ### Tahap E — Latar belakang, Sesi Cek Mata, autostart, kamera bentrok, bantuan
 
-**Status:** ⏳ belum. Tidak ada tray, foreground service, `features/eye_check/`, `features/help/`, maupun retry kamera. Mode Fokus sementara dari Dashboard; autostart tampil "segera hadir".
+**Status:** 🟡 sebagian (23 Nov 2026). `features/background/` (tray Windows, foreground service Android, layar mati, autostart via `reg.exe`), `features/eye_check/`, `features/help/` + ikon bantuan di semua layar, Jeda/Lanjut, kamera bentrok → Mode Timer + coba ulang 60 dtk. Semua kriteria di bawah butuh uji manual di perangkat. Batasan Android: kamera berhenti saat aplikasi tidak terlihat (§16 #32).
 
 **Tujuan:** melengkapi perilaku platform dan dokumentasi pengguna di dalam aplikasi.
 
@@ -323,7 +323,7 @@ Catat fps, hasil uji jarak, dan jumlah kedipan terdeteksi vs dihitung manual (1 
 - [ ] Android: pemantauan lanjut saat aplikasi di latar belakang dengan notifikasi permanen; berhenti saat layar mati.
 - [ ] Buka kamera di aplikasi lain (mis. Zoom/Kamera Windows) → VisionGuard pindah ke Mode Timer, lalu kembali ke Mode AI ≤ 60 dtk setelah kamera dilepas.
 - [ ] Sesi Cek Mata berjalan di HP Android sesuai UC-11.
-- [ ] Ikon bantuan ada di Dashboard, Statistik, Kredit, Pengaturan, Kalibrasi.
+- [x] Ikon bantuan ada di Dashboard, Statistik, Kredit, Pengaturan, Kalibrasi. *(Juga Login, Lupa sandi, Onboarding, Sesi Cek Mata.)*
 
 **Cara verifikasi:**
 ```bash
@@ -408,3 +408,4 @@ Isi satu baris setiap akhir sesi (terbaru di bawah).
 `/karakter tak terlihat, tidak tertukar, awalan SB- benar, panjang 38), implementasi ping benar (URL, Basic base64(key+":"), Accept JSON); Status API & Snap (payload tanpa transaksi) sama-sama 401, identik dengan kunci kosong/acak → key tidak dikenali Sandbox. Key memuat `~`/`.` dan Merchant ID tidak berawalan G. Ditambah trim key di config + laporan format di `payments:check`. 85 test backend lulus | Pengguna perlu menyalin ulang key asli Sandbox |
 | 2026-11-16 | B (perbaikan) | Model access key baru Midtrans: `MIDTRANS_SIGNATURE_SECRET_KEY` (verifikasi notifikasi, fallback Server Key + peringatan), Merchant ID opsional, `payments:check` tanpa peringatan karakter `~`/`.` & awalan G, saran 401 (izin Snap Checkout: Write, Core API: Read). Koreksi diagnosis sebelumnya: `~`/`.` di key bukan masalah. 91 test backend lulus | §16 #30 |
 | 2026-11-23 | D | Jalur `tflite_flutter` 0.12.1 + MediaPipe Face Landmarker dipilih pengguna. `MediaPipeFaceAnalyzer` (BlazeFace 128 → ROI berotasi → 478 landmark 256, pelacakan ROI dari landmark, `IsolateInterpreter`, sampling langsung YUV420/BGRA tanpa salinan ke disk), `face_mesh_geometry.dart`, rotasi sensor di `CameraFrame`, `selectFaceAnalyzer` (fallback "Mode simulasi — alasan"). Model + lisensi di README. 24 test baru (191 lulus), `flutter analyze` bersih, `flutter build apk --debug` berhasil. Perbaikan build: komentar XML `network_security_config.xml` (debug) berisi `--`; target JVM Kotlin `tflite_flutter` disamakan ke 11 di `android/build.gradle.kts` | §16 #31. Paket baru: `tflite_flutter`. Windows tetap simulasi (`camera_windows` 0.3.1 tanpa image stream). Belum diuji di HP: kedipan vs hitung manual, jarak 30/50/80 cm, yaw > 30°, fps; arah rotasi kamera depan juga perlu dicek (ada koreksi otomatis 0/180°) |
+| 2026-11-23 | E | Paket dipilih pengguna: `tray_manager` ^0.8.3 + `window_manager` ^0.6.0 (API native; versi baru butuh Flutter ≥ 3.50), `flutter_foreground_task` ^11.0.3; Android: service + jeda otomatis saat app tak terlihat. Dibuat `features/background/` (tray S-11, tutup jendela = sembunyi, pengingat via notifikasi saat tersembunyi, foreground service `camera`, layar mati → stop, autostart `reg.exe` + `--autostart`), `features/eye_check/` (S-07/UC-11), `features/help/` + ikon bantuan semua layar, Jeda/Lanjut, kamera bentrok → Mode Timer + coba ulang 60 dtk tanpa potong kredit. 25 test baru (216 lulus), `flutter analyze` bersih, `flutter build apk --debug` berhasil. `flutter build windows` terhenti (memori sistem hampir habis), belum terverifikasi | §16 #32–#34. `launch_at_startup` bentrok `win32` 6 → tidak dipakai. `MainActivity.kt` lama di `android/app/src/main/kotlin/com/yoga141/visionguard/` (tidak dipakai, namespace `id.ac.itk.visionguard`) sudah dihapus beserta folder kosongnya; `flutter analyze` bersih & `flutter build apk --debug` berhasil. Uji manual semua kriteria Tahap E + CPU/RAM di tray |

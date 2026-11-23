@@ -116,4 +116,10 @@ class CvConstants {
   static const int yawLeftIndex = 454;
   /// Thread CPU per interpreter TFLite.
   static const int inferenceThreads = 2;
+
+  // ---- Tahap E: kamera bentrok, Sesi Cek Mata ----
+  /// Kamera dipakai aplikasi lain → Mode Timer, coba lagi tiap interval ini (UC-09, PMT-08).
+  static const Duration cameraRetryInterval = Duration(seconds: 60);
+  /// Lama Sesi Cek Mata (UC-11, PMT-07); keluar sebelum selesai = batal.
+  static const Duration eyeCheckDuration = Duration(minutes: 2);
 }

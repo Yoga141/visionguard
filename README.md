@@ -4,7 +4,7 @@ Aplikasi Flutter berbasis *computer vision* untuk deteksi dini dan pencegahan ke
 
 Mayoga Finanda (11241044) — Informatika. Dokumen acuan: SRS & SDD VisionGuard v1.0.
 
-## Status: Tahap A–D (aplikasi tersambung ke backend, MediaPipe di Android)
+## Status: Tahap A–E (backend, MediaPipe di Android, latar belakang & bantuan)
 
 Legenda: ✅ selesai · 🟡 sebagian · ⏳ belum. Backend Laravel ada di `backend/` (lihat
 `backend/README.md` dan `API_CONTRACT.md`) dan aplikasi memakainya **secara bawaan** sejak Tahap C.
@@ -25,9 +25,9 @@ Repository tiruan hanya untuk test dan `--dart-define=USE_REMOTE_API=false`. Det
 | PMT-03 | Estimasi jarak real-time | 🟡 sebagian | Iris 469↔471 / 474↔476 dari MediaPipe; uji penggaris 30/50/80 cm belum |
 | PMT-04 | PERCLOS & skor tiap 10 detik | 🟡 sebagian | Selesai di CV Engine; menunggu uji dengan wajah asli |
 | PMT-05 | Jeda saat wajah hilang > 10 detik | ✅ selesai | `SessionEvaluator` |
-| PMT-06 | Latar belakang (tray / foreground service) | ⏳ belum | |
-| PMT-07 | Sesi Cek Mata 2 menit (mobile) | ⏳ belum | |
-| PMT-08 | Beralih ke Mode Timer | 🟡 sebagian | Offline/error aktivasi & pilihan saat kredit habis; deteksi kamera dipakai app lain belum |
+| PMT-06 | Latar belakang (tray / foreground service) | 🟡 sebagian | Windows: tutup jendela → tray, menu S-11, pengingat via notifikasi. Android: foreground service `camera` + notifikasi permanen selama Mode AI; kamera berhenti saat aplikasi tak terlihat (batasan plugin, §16 #32). Belum diuji manual |
+| PMT-07 | Sesi Cek Mata 2 menit (mobile) | 🟡 sebagian | S-07: cek status hari → aktivasi → teks bacaan 2 mnt → skor + Saran AI; batal < 2 mnt tidak disimpan; `sessions.mode='check'`. Belum diuji di HP |
+| PMT-08 | Beralih ke Mode Timer | ✅ selesai | Offline & hari belum aktif → Timer; kamera dipakai app lain / izin ditolak → Timer + coba lagi tiap 60 dtk, kembali ke AI tanpa memotong kredit |
 | PNG-01 | Pengingat kedip | ✅ selesai | BR < 10 selama 3 mnt, cooldown 10 mnt |
 | PNG-02 | Pengingat jarak | ✅ selesai | < 50/30 cm selama 10 dtk, cooldown 5 mnt |
 | PNG-03 | Pengingat istirahat | ✅ selesai | Skor ≥ 60, cooldown 20 mnt |
@@ -43,7 +43,7 @@ Repository tiruan hanya untuk test dan `--dart-define=USE_REMOTE_API=false`. Det
 | KRD-03 | Kredit bertambah setelah pembayaran | 🟡 sebagian | Server: notifikasi bersignature + idempoten; teruji otomatis & mode simulasi, Sandbox manual belum |
 | KRD-04 | Riwayat transaksi & pemakaian | ✅ selesai | `GET /credits/history` |
 | PGT-01 | Sensitivitas, jenis pengingat, interval | ✅ selesai | τ 0,65/0,70/0,75; interval 10–60 mnt |
-| PGT-02 | Autostart | ⏳ belum | Tampil "segera hadir" |
+| PGT-02 | Autostart | 🟡 sebagian | Windows: toggle Pengaturan → `HKCU\…\Run` (`--autostart` → langsung ke tray). macOS belum. Belum diuji login ulang Windows |
 | ADM-01 | Admin kelola paket kredit | ✅ selesai | Filament `/admin` → Paket Kredit (paket pernah dibeli tidak bisa dihapus) |
 | ADM-02 | Admin lihat pengguna & transaksi | ✅ selesai | Filament → Transaksi (filter status & tanggal) dan Pengguna (saldo) |
 | ADM-03 | Admin sesuaikan kredit + alasan | ✅ selesai | Aksi "Sesuaikan kredit" (alasan wajib, saldo akhir ≥ 0) |
@@ -105,6 +105,10 @@ lib/
 │   └── cv_providers.dart             # provider + selectFaceAnalyzer (MediaPipe / fallback simulasi)
 ├── features/
 │   ├── auth/         (data, application, presentation) — login, auto-login, lupa sandi, hapus akun
+│   ├── background/   (data, application, presentation) — tray Windows, foreground service Android,
+│   │                 layar mati, autostart, notifikasi saat jendela tersembunyi
+│   ├── eye_check/    (application, presentation) — Sesi Cek Mata 2 menit (S-07, mobile)
+│   ├── help/         (domain, presentation) — Bantuan & FAQ (ikon bantuan di setiap layar)
 │   ├── onboarding/   (presentation)
 │   ├── calibration/  (application, presentation)
 │   ├── ai_assistant/ (data, application, presentation) — Saran AI (§17)
@@ -114,10 +118,13 @@ lib/
 │   ├── reminders/    (domain, application, data, presentation) — RuleEngine, TimerService, pop-up
 │   ├── settings/     (data, application, presentation)
 │   └── stats/        (data, application, presentation) — agregasi, SyncService → POST /stats/daily, grafik S-08
-└── shared/widgets/                   # widget bersama (badge kamera aktif)
+└── shared/widgets/                   # widget bersama (badge kamera aktif, tombol bantuan)
 test/
 ├── cv_engine_test.dart               # uji rumus EAR, jarak, skor
 ├── mediapipe_face_analyzer_test.dart # konversi landmark sintetis, anchor, sampling, yaw, fallback
+├── background_test.dart              # menu tray, jeda/lanjut, kamera bentrok + coba ulang, service, autostart
+├── eye_check_test.dart               # hitungan Sesi Cek Mata, batal < 2 mnt, simpan sesi 'check'
+├── help_test.dart                    # isi FAQ, halaman & tombol bantuan
 ├── reminders_test.dart               # RuleEngine, TimerService, tunda/fokus, verifikasi istirahat
 ├── stats_test.dart                   # agregasi daily_summaries, sinkron/offline, halaman Statistik
 ├── credits_test.dart                 # aktivasi hari §8.2, ledger, halaman Kredit
@@ -150,6 +157,22 @@ menampilkan alasannya ("Mesin deteksi: Mode simulasi — …"). Opsi demo hanya 
 Sumber: Google MediaPipe — <https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker>.
 Lisensi: **Apache License 2.0** (model card MediaPipe Face Mesh V2 & BlazeFace). `face_blendshapes.tflite`
 dari bundel yang sama tidak dipakai. Runtime: `tflite_flutter` 0.12.1 (LiteRT 1.4.0, Apache 2.0).
+
+## Latar Belakang, Sesi Cek Mata & Bantuan (Tahap E)
+
+| Platform | Perilaku |
+|---|---|
+| **Windows** | Tombol tutup jendela menyembunyikan aplikasi ke **system tray** (pemberitahuan sekali). Klik ikon membuka jendela; klik kanan membuka menu: status, Jeda/Lanjut, Mode Fokus 30/60/90/120 (+ Akhiri), Buka Dashboard, Logout, Keluar. Selama tersembunyi, pengingat dikirim sebagai **notifikasi sistem**. **Autostart** di Pengaturan menulis `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\VisionGuard` dengan argumen `--autostart` (aplikasi langsung ke tray). |
+| **Android** | Selama Mode AI berjalan: **foreground service** (`flutter_foreground_task`, tipe `camera`) + notifikasi permanen berisi status. **Layar mati → pemantauan berhenti** (BroadcastReceiver di `MainActivity.kt`, KDL-02). Plugin `camera` (CameraX) menutup kamera saat aplikasi tidak terlihat; pemantauan otomatis dijeda ("wajah tidak terdeteksi", PMT-05) dan kamera menyala lagi saat aplikasi dibuka. **Sesi Cek Mata** 2 menit dari Dashboard. |
+| macOS / iOS | Belum: tray macOS & autostart macOS tidak diaktifkan; iOS tidak mendukung foreground service kamera. |
+
+Semua platform: **Jeda/Lanjut** di Dashboard; kamera dipakai aplikasi lain → Mode Timer + coba
+lagi tiap 60 detik; ikon **Bantuan** (?) di setiap layar membuka **Bantuan & FAQ** pada topik
+layar tersebut (bisa dibuka tanpa login).
+
+Paket baru: `tray_manager` ^0.8.3, `window_manager` ^0.6.0 (versi lebih baru butuh Flutter ≥ 3.50),
+`flutter_foreground_task` ^11.0.3. `launch_at_startup` tidak dipakai karena bentrok `win32` 6
+(`flutter_secure_storage`); autostart memakai `reg.exe` bawaan Windows.
 
 ## Catatan Privasi
 

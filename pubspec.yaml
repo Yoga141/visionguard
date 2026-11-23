@@ -44,6 +44,13 @@ dependencies:
   # Runtime TFLite/LiteRT untuk MediaPipe Face Landmarker (DOCS_SPEC §4.2, Tahap D)
   tflite_flutter: ^0.12.1
 
+  # Latar belakang (Tahap E, PMT-06): system tray & sembunyikan jendela Windows
+  # (S-11). Versi 0.9/0.7 butuh Flutter >= 3.50, jadi tetap di minor ini.
+  tray_manager: ^0.8.3
+  window_manager: ^0.6.0
+  # Foreground service + notifikasi permanen Android selama Mode AI
+  flutter_foreground_task: ^11.0.3
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -58,3 +65,5 @@ flutter:
   assets:
     - assets/models/face_detector.tflite
     - assets/models/face_landmarks_detector.tflite
+    # Ikon system tray Windows (S-11), salinan windows/runner/resources/app_icon.ico
+    - assets/tray/tray_icon.ico

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/constants/cv_constants.dart';
 import '../../../core/database/app_database.dart';
+import '../../background/application/app_visibility.dart';
 import '../../monitoring/data/alert_repository.dart';
 import '../../settings/application/settings_controller.dart';
 import '../data/notification_service.dart';
@@ -154,7 +155,10 @@ class ReminderController extends Notifier<ReminderState> {
 
   Future<void> _deliver(ReminderType type, AppSettings s) async {
     var notified = false;
-    if (s.notificationEnabled) {
+    // Jendela di tray / aplikasi di latar: pop-up tidak terlihat, jadi
+    // pengingat selalu dikirim lewat notifikasi sistem (S-11, PMT-06).
+    final hidden = ref.read(appInBackgroundProvider);
+    if (s.notificationEnabled || hidden) {
       notified = await _notifier.show(title: type.title, body: type.message, sound: s.soundEnabled);
     }
     final current = state.active;
