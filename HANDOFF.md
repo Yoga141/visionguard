@@ -15,6 +15,9 @@ kredit (ledger), pembayaran Midtrans, statistik, Saran AI (proxy Gemini), dan pa
 
 Status per kebutuhan: tabel audit di **`README.md`**. Per tahap: **`ROADMAP.md`**.
 
+**Distribusi v1.0:** di luar toko aplikasi — APK langsung (Android) dan installer Windows — dengan
+pembayaran Midtrans (DOCS_SPEC §4.5, §16 #36). Saran AI adalah fitur resmi (DOCS_SPEC §8.9, SAI-01..03).
+
 ## 2. Arsitektur
 
 ```
@@ -36,8 +39,8 @@ Status per kebutuhan: tabel audit di **`README.md`**. Per tahap: **`ROADMAP.md`*
 │ GeminiAdviceService, …) → Models → MySQL 8 (7 tabel §12.2)             │
 │ Filament 5 /admin · halaman web pembayaran & reset sandi               │
 └───────┬─────────────────────────────┬──────────────────────────────────┘
-        │ Snap + Status API           │ angka ringkasan saja (§17.2)
-     Midtrans                      Gemini API
+        │ Snap + Status API           │ angka ringkasan saja (§8.9)
+     Midtrans                      Gemini API (Saran AI, DOCS_SPEC §8.9)
 ```
 
 Prinsip yang tidak boleh dilanggar:
@@ -47,7 +50,7 @@ Prinsip yang tidak boleh dilanggar:
 - `lib/cv_engine/` tidak meng-import UI; konstanta CV hanya di `cv_constants.dart`.
 - Key (Midtrans, Gemini, SMTP) hanya di `backend/.env` (di-ignore Git).
 
-Alur penting (detail di `AGENTS.md` §4): aktivasi hari & kredit, pengingat (RuleEngine tiap 10 dtk),
+Alur penting (detail di `AGENTS.md` §4): aktivasi hari & kredit, pengingat (skor tiap 10 dtk, RuleEngine tiap 1 dtk → ≤ 2 dtk, KNR-03),
 statistik & sinkron, beli kredit, latar belakang (tray/foreground service), kamera bentrok.
 
 ## 3. Menjalankan
@@ -79,7 +82,7 @@ flutter run -d windows --dart-define=USE_REMOTE_API=false   # tanpa server (repo
 
 ### Verifikasi
 ```bash
-flutter analyze && flutter test            # 0 issue · 216 test
+flutter analyze && flutter test            # 0 issue · 217 test
 flutter test --coverage                    # lcov di coverage/lcov.info
 flutter build apk --debug
 cd backend && php artisan test && ./vendor/bin/pint --test    # 91 test
@@ -113,7 +116,7 @@ Hemat Plus (30, Rp65.000).
 
 | Area | Status |
 |---|---|
-| Akun, kalibrasi (logika), aktivasi hari & kredit, pengingat PNG-01..07, statistik, Saran AI, admin | ✅ kode + test |
+| Akun, kalibrasi (logika), aktivasi hari & kredit, pengingat PNG-01..07 (≤ 2 dtk, KNR-03), statistik, Saran AI (SAI-01..03), admin | ✅ kode + test |
 | Deteksi wajah asli (MediaPipe) | 🟡 Android/iOS terpasang, belum diuji di HP; Windows mode simulasi |
 | Latar belakang (tray Windows, foreground service Android), Sesi Cek Mata, autostart | 🟡 kode + test, uji manual belum |
 | Pembayaran Midtrans Sandbox | 🟡 teruji otomatis & simulasi; transaksi Sandbox asli belum |
@@ -131,9 +134,8 @@ Coverage backend belum terukur (PHP tanpa Xdebug/PCOV).
   "Mode simulasi" (pratinjau kamera tetap asli).
 - **Kamera Android di latar**: `camera_android_camerax` terikat ke Activity; saat aplikasi tidak terlihat
   frame berhenti dan pemantauan otomatis dijeda (§16 #32). Layar mati → pemantauan berhenti.
-- **KNR-03**: pengingat AI diputuskan tiap 10 dtk sehingga bisa tertunda hingga 10 dtk (§16 #35, terbuka).
-- **Pembayaran di toko aplikasi**: Midtrans di browser kemungkinan tidak sesuai kebijakan Google Play
-  Billing / App Store IAP untuk barang digital (§16 #36, terbuka). Aman untuk distribusi di luar toko.
+- **Pembayaran di toko aplikasi**: v1.0 hanya untuk distribusi di luar toko. Rilis ke Google Play /
+  App Store **wajib** Google Play Billing / In-App Purchase untuk pembelian kredit (§16 #36); belum dibuat.
 - `flutter build windows` setelah Tahap E belum terverifikasi (build terhenti karena memori sistem).
 - Versi paket ditahan: `tray_manager` 0.8.x / `window_manager` 0.6.x (versi baru butuh Flutter ≥ 3.50);
   `launch_at_startup` tidak dipakai (bentrok `win32` 6).
@@ -145,12 +147,13 @@ Coverage backend belum terukur (PHP tanpa Xdebug/PCOV).
 |---|---|
 | P1 | Uji MediaPipe di HP Android: kedipan vs hitung manual 1 mnt, jarak 30/50/80 cm (±5 cm), yaw > 30°, fps ≥ 10; cek arah rotasi kamera depan |
 | P1 | Uji transaksi Midtrans Sandbox end-to-end (notifikasi via tunnel) |
-| P1 | Putuskan §16 #36 (Play Billing/IAP vs distribusi di luar toko) dan §16 #35 (KNR-03) |
 | P1 | Jalankan `flutter build windows` + uji tray, tutup jendela, autostart (login ulang Windows), CPU/RAM di tray (KNR-02) |
 | P2 | Uji foreground service, layar mati, Sesi Cek Mata, kamera bentrok di HP Android |
 | P2 | Pasang Xdebug/PCOV → `php artisan test --coverage` (target ≥ 70 % untuk `MonitoringDayService`, `CreditAdjustmentService`, notifikasi pembayaran) |
+| P2 | Bila akan rilis ke **Google Play / App Store**: implementasikan Google Play Billing (Android) / In-App Purchase (iOS) untuk paket kredit — produk konsumsi per paket, verifikasi token/receipt di server (Google Play Developer API / App Store Server API), kredit ditulis ke `credit_ledger` hanya setelah verifikasi (idempoten), Midtrans tetap untuk build di luar toko. Wajib sebelum unggah ke toko (§16 #36) |
+| P2 | Siapkan paket distribusi di luar toko: APK release bertanda tangan + installer Windows (MSIX/`.exe`), backend HTTPS |
 | P2 | Deploy backend (Ubuntu 22.04 + Nginx + PHP-FPM + TLS, §4.1), ganti akun seeder, `CORS_ALLOWED_ORIGINS` |
-| P3 | Revisi SRS/SDD menurut DOCS_SPEC §18; minta persetujuan sebelum memindahkan §17 ke bagian utama |
+| P3 | Revisi SRS/SDD menurut DOCS_SPEC §18 (Saran AI sudah resmi di DOCS_SPEC §8.9) |
 | P3 | Deteksi wajah Windows (plugin kamera dengan frame stream + DLL TFLite); build & uji macOS/iOS |
 | P3 | Kamera Android di latar (CameraX + inferensi di dalam service, native) |
 | P3 | Uji akurasi berlabel (AKR-01/02) dan waktu onboarding (USB-01) |

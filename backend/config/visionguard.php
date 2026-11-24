@@ -41,7 +41,7 @@ return [
     // Prefix kode order (orders.order_code ≤ 40 karakter).
     'order_code_prefix' => 'VG',
 
-    // §17.4 — batas pemakaian Saran AI per pengguna.
+    // §8.9 — batas pemakaian Saran AI per pengguna.
     'ai_advice' => [
         'max_per_hour' => (int) env('AI_ADVICE_MAX_PER_HOUR', 10),
     ],

@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../../core/constants/cv_constants.dart';
 import '../../../cv_engine/fatigue_scorer.dart';
 
-/// Ringkasan metrik yang boleh dikirim ke layanan Saran AI (DOCS_SPEC §17).
+/// Ringkasan metrik yang boleh dikirim ke layanan Saran AI (DOCS_SPEC §8.9).
 ///
 /// **Hanya angka ringkasan.** Tidak ada frame, gambar, landmark, atau EAR mentah.
 class AdviceMetrics {
@@ -30,7 +30,7 @@ class AdviceMetrics {
 
   FatigueLevel get level => FatigueScorer.levelOf(fatigueScore);
 
-  /// Body JSON untuk POST /ai/advice (snake_case, §17).
+  /// Body JSON untuk POST /ai/advice (snake_case, §8.9).
   Map<String, Object?> toJson() => {
         'fatigue_score': fatigueScore,
         'blink_rate': blinkRate,

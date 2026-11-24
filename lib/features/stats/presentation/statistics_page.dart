@@ -108,7 +108,7 @@ class _TodayTab extends StatelessWidget {
     ]);
   }
 
-  /// §17.2: hanya angka ringkasan harian.
+  /// §8.9: hanya angka ringkasan harian.
   static AdviceMetrics? _adviceMetrics(DailySummary s) => s.avgFatigueScore == null
       ? null
       : AdviceMetrics(

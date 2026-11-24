@@ -22,7 +22,7 @@ class AppServiceProvider extends ServiceProvider
         // Format JSON datar (tanpa pembungkus "data"), sesuai klien Flutter.
         JsonResource::withoutWrapping();
 
-        // §17.4 — batas pemakaian Saran AI per pengguna → 429.
+        // §8.9 — batas pemakaian Saran AI per pengguna → 429.
         RateLimiter::for('ai-advice', function (Request $request) {
             return Limit::perHour((int) config('visionguard.ai_advice.max_per_hour'))
                 ->by('ai-advice:'.$request->user()?->id)

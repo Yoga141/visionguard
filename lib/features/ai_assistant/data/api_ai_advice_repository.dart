@@ -1,7 +1,7 @@
 import '../../../core/network/api_client.dart';
 import 'ai_advice_repository.dart';
 
-/// Saran AI lewat backend Laravel: POST /ai/advice (DOCS_SPEC §17, **usulan**).
+/// Saran AI lewat backend Laravel: POST /ai/advice (DOCS_SPEC §8.9, §11.2).
 ///
 /// Ini jalur **final**: API key Gemini hanya disimpan di server, klien cukup
 /// mengirim angka ringkasan dengan token Sanctum.

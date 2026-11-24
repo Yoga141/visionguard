@@ -174,9 +174,10 @@ final monitoringControllerProvider =
 /// MonitoringSession (SDD 4.1): mengatur siklus mulai → analisis → berhenti.
 ///
 /// Alur per frame: CameraSource → FaceAnalyzer → BlinkAnalyzer &
-/// DistanceEstimator → FatigueScorer → state UI. Tiap 10 detik (saat
-/// SessionEvaluator mengevaluasi) metrik diteruskan ke RuleEngine; pengingat
-/// prioritas tertinggi ditampilkan lewat ReminderService (Seq 4.22).
+/// DistanceEstimator → FatigueScorer → state UI. Skor dihitung tiap 10 detik
+/// (SessionEvaluator, PMT-04); RuleEngine dievaluasi tiap 1 detik dengan
+/// metrik terakhir (KNR-03, §16 #35) dan pengingat prioritas tertinggi
+/// ditampilkan lewat ReminderService (Seq 4.22).
 /// TimerService menghitung waktu layar kontinu untuk 20-20-20 di kedua mode.
 ///
 /// Setiap pemantauan dicatat di tabel `sessions`; selama Mode AI, metrik
@@ -475,16 +476,30 @@ class MonitoringController extends Notifier<MonitoringState> {
   @visibleForTesting
   TimerService get screenTimer => _screenTimer;
 
-  /// Satu detak TimerService (dipanggil tiap detik; publik untuk test).
+  /// Satu detak 1 detik (publik untuk test; [now] dapat diganti di test).
+  ///
+  /// KNR-03 (DOCS_SPEC §16 #35): RuleEngine dievaluasi **setiap detak**
+  /// memakai metrik terakhir, sehingga pengingat muncul ≤ 2 detik setelah
+  /// kondisi terpenuhi. Skor kelelahan tetap dihitung tiap 10 detik oleh
+  /// SessionEvaluator (PMT-04); durasi kondisi jarak/kedip dilacak per frame.
   @visibleForTesting
-  void tickScreenTimer() {
+  void tickScreenTimer({DateTime? now}) {
+    final t = now ?? DateTime.now();
     final ai = state.mode == MonitoringMode.ai;
     // Mode AI: waktu layar tidak bertambah saat wajah hilang > 10 dtk (PMT-05).
     if (!(ai && state.facePaused)) _screenTimer.tick();
     state = state.copyWith(secondsToNext202020: _screenTimer.remaining.inSeconds);
-    // Mode Timer: tidak ada evaluasi 10 detik, cek 20-20-20 setiap detak.
-    if (state.mode == MonitoringMode.timer && _screenTimer.due) {
-      _evaluateReminders(ReminderMetrics(t: DateTime.now(), rule202020Due: true));
+    if (state.mode == MonitoringMode.timer) {
+      if (_screenTimer.due) _evaluateReminders(ReminderMetrics(t: t, rule202020Due: true));
+    } else if (ai && !state.facePaused) {
+      // Perhitungan dijeda saat wajah hilang > 10 dtk → tidak ada pengingat AI.
+      _evaluateReminders(ReminderMetrics(
+        t: t,
+        fatigueScore: _lastScore,
+        distanceCm: _lastDistance,
+        blinkRate: _lastBlink?.blinkRate,
+        rule202020Due: _screenTimer.due,
+      ));
     }
   }
 
@@ -611,9 +626,9 @@ class MonitoringController extends Notifier<MonitoringState> {
       final distance = _distance!.update(result);
       // PERCLOS & skor tiap 10 detik; dijeda bila wajah hilang > 10 detik.
       final evaluator = _evaluator!;
-      final evaluated =
-          evaluator.update(t: result.timestamp, faceDetected: result.faceDetected, blink: blink);
-      // Durasi kondisi jarak/kedip dilacak per frame; keputusan tiap 10 detik.
+      evaluator.update(t: result.timestamp, faceDetected: result.faceDetected, blink: blink);
+      // Durasi kondisi jarak/kedip dilacak per frame; keputusan pengingat
+      // tiap detak 1 detik (tickScreenTimer, KNR-03).
       _rules?.observe(result.timestamp, distanceCm: distance, blinkRate: blink.blinkRate);
       _reminders.observeFace(
           t: result.timestamp, faceDetected: result.faceDetected, yawDeg: result.yawDeg);
@@ -636,15 +651,6 @@ class MonitoringController extends Notifier<MonitoringState> {
         facePaused: evaluator.paused,
         screenMinutes: evaluator.screenMinutes,
       );
-      if (evaluated) {
-        _evaluateReminders(ReminderMetrics(
-          t: result.timestamp,
-          fatigueScore: evaluator.score,
-          distanceCm: distance,
-          blinkRate: blink.blinkRate,
-          rule202020Due: _screenTimer.due,
-        ));
-      }
     } finally {
       _busy = false;
     }

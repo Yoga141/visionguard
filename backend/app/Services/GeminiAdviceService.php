@@ -7,9 +7,9 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 
 /**
- * Saran AI lewat Gemini — DOCS_SPEC §17.4.
+ * Saran AI lewat Gemini — DOCS_SPEC §8.9 & §11.2.
  *
- * - Yang dikirim ke Gemini **hanya angka ringkasan** §17.2 (tanpa nama, email,
+ * - Yang dikirim ke Gemini **hanya angka ringkasan** §8.9 (tanpa nama, email,
  *   ID pengguna, gambar, landmark).
  * - API key hanya di `backend/.env` (`GEMINI_API_KEY`).
  * - Prompt dan respons **tidak disimpan/di-log**.

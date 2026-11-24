@@ -9,7 +9,7 @@ import 'ai_advice_repository.dart';
 /// (tidak lagi dari asset `.env`). Nilai dart-define tertanam di build, jadi
 /// jangan dipakai untuk build yang dibagikan. Bawaan aplikasi memakai backend
 /// (`ApiAiAdviceRepository`, POST /ai/advice) agar key hanya ada di server
-/// (DOCS_SPEC §17).
+/// (DOCS_SPEC §8.9).
 ///
 /// Yang dikirim hanya [AdviceMetrics] (angka ringkasan), tanpa frame/gambar.
 class DirectGeminiAdviceRepository implements AiAdviceRepository {

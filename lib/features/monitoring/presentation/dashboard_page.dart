@@ -122,7 +122,7 @@ class DashboardPage extends ConsumerWidget {
     );
   }
 
-  /// §17.2: hanya angka ringkasan dari state pemantauan terakhir.
+  /// §8.9: hanya angka ringkasan dari state pemantauan terakhir.
   static AdviceMetrics? _adviceMetrics(MonitoringState m) => m.fatigueScore == null
       ? null
       : AdviceMetrics(

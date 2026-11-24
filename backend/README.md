@@ -2,7 +2,7 @@
 
 REST API + panel admin untuk aplikasi VisionGuard: akun, perangkat, Hari Pemantauan AI, kredit (ledger),
 pembayaran Midtrans, reset kata sandi, statistik harian, dan Saran AI (proxy Gemini).
-Acuan: `../DOCS_SPEC.md` §8, §11, §12.2, §13.2, §17 dan kontrak JSON `../API_CONTRACT.md`.
+Acuan: `../DOCS_SPEC.md` §8 (termasuk §8.9 Saran AI), §11, §12.2, §13.2 dan kontrak JSON `../API_CONTRACT.md`.
 
 - Laravel 13, PHP ≥ 8.3, Laravel Sanctum (token API), MySQL 8, Filament 5 (panel admin `/admin`).
 - Tidak ada kolom gambar di tabel mana pun. Saldo kredit selalu `SUM(credit_ledger.delta)`.

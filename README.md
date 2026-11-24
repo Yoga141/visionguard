@@ -10,7 +10,7 @@ Legenda: ✅ selesai (kode + test otomatis) · 🟡 sebagian (kode ada, uji manu
 fitur belum) · ⏳ belum. Backend Laravel di `backend/` (lihat `backend/README.md`, `API_CONTRACT.md`);
 aplikasi memakainya secara bawaan. Detail tahap: `ROADMAP.md`. Serah terima: `HANDOFF.md`.
 
-Verifikasi terakhir: `flutter analyze` 0 issue · `flutter test` 216 lulus · `php artisan test` 91 lulus ·
+Verifikasi terakhir: `flutter analyze` 0 issue · `flutter test` 217 lulus · `php artisan test` 91 lulus ·
 Pint bersih · `flutter build apk --debug` berhasil. Coverage: `lib/cv_engine/` 77,5 %,
 `lib/features/credits/` 88,7 % (PML-01); coverage backend tidak terukur (PHP tanpa Xdebug/PCOV).
 
@@ -29,7 +29,7 @@ Pint bersih · `flutter build apk --debug` berhasil. Coverage: `lib/cv_engine/` 
 | PMT-01 | ✅ | `credit_controller`, `api_credit_repository`; `backend` `MonitoringDayService` | §8.2 di server (lock baris); 402 → beli / Mode Timer |
 | PMT-02 | 🟡 | `cv_engine/mediapipe_face_analyzer.dart`, `blink_analyzer.dart` | MediaPipe di Android/iOS, Windows mode simulasi; belum diuji di HP asli |
 | PMT-03 | 🟡 | `distance_estimator.dart` (median iris 1 dtk) | Uji penggaris 30/50/80 cm belum |
-| PMT-04 | 🟡 | `session_evaluator.dart`, `fatigue_scorer.dart` | Logika ✅ (tiap 10 dtk, int); menunggu uji wajah asli |
+| PMT-04 | 🟡 | `session_evaluator.dart`, `fatigue_scorer.dart` | Logika ✅ (skor tiap 10 dtk, int; pengingat dievaluasi tiap 1 dtk); menunggu uji wajah asli |
 | PMT-05 | ✅ | `session_evaluator.dart` | Wajah hilang > 10 dtk → dijeda |
 | PMT-06 | 🟡 | `features/background/` (`desktop_tray`, `foreground_service`, `background_coordinator`) | Tray Windows & foreground service Android ada; kamera Android berhenti saat app tak terlihat (§16 #32); belum diuji manual |
 | PMT-07 | 🟡 | `features/eye_check/` | Alur UC-11 + simpan `mode='check'` teruji otomatis; belum diuji di HP |
@@ -53,6 +53,9 @@ Pint bersih · `flutter build apk --debug` berhasil. Coverage: `lib/cv_engine/` 
 | ADM-01 | ✅ | `backend/app/Filament/Resources/CreditPackages` | Paket pernah dibeli tidak bisa dihapus |
 | ADM-02 | ✅ | Filament `Orders` (baca saja), `Users` | Filter status & tanggal |
 | ADM-03 | ✅ | Filament `Users` → "Sesuaikan kredit", `CreditAdjustmentService` | Alasan wajib, saldo akhir ≥ 0 |
+| SAI-01 | ✅ | `features/ai_assistant/` (`ai_advice_card`, `api_ai_advice_repository`); `backend` `GeminiAdviceService` | Dashboard, Statistik, hasil Sesi Cek Mata; hanya angka §8.9 |
+| SAI-02 | ✅ | `ai_advice_repository.dart` (saran statis) | Error/offline/429/503 → saran statis |
+| SAI-03 | ✅ | `backend` throttle `ai-advice`, `config/visionguard.php` | 10/jam/pengguna, gratis |
 
 ### Kebutuhan non-fungsional (DOCS_SPEC §6)
 
@@ -60,7 +63,7 @@ Pint bersih · `flutter build apk --debug` berhasil. Coverage: `lib/cv_engine/` 
 |---|---|---|---|
 | KNR-01 | 🟡 | `camera_source.dart` (throttle 15/10 fps), `IsolateInterpreter` | fps nyata belum diukur |
 | KNR-02 | ⏳ | — | CPU/RAM di tray belum diukur |
-| KNR-03 | 🟡 | `monitoring_controller` (evaluasi 10 dtk) | Pengingat AI bisa tertunda ≤ 10 dtk (§16 #35, keputusan terbuka); latensi API belum diukur |
+| KNR-03 | 🟡 | `monitoring_controller.tickScreenTimer` (RuleEngine tiap 1 dtk, §16 #35) | Pengingat ≤ 2 dtk setelah kondisi terpenuhi ✅ (test `reminders_test` KNR-03); latensi API 95 % < 1 dtk belum diukur |
 | AKR-01 | ⏳ | — | Butuh data uji berlabel (precision/recall ≥ 90 %) |
 | AKR-02 | ⏳ | — | Uji jarak ±5 cm pada 30–80 cm belum |
 | PRV-01 | ✅ | `CameraFrame` hanya di memori; pencarian `writeAsBytes/toImage/MultipartFile/Blob` bersih | Tidak ada kolom BLOB/gambar |
@@ -77,7 +80,7 @@ Pint bersih · `flutter build apk --debug` berhasil. Coverage: `lib/cv_engine/` 
 | PML-01 | 🟡 | `lib/cv_engine/` terpisah dari UI | Flutter CV 77,5 %, kredit 88,7 %; backend tidak terukur |
 | KSL-01 | ✅ | `privacy_onboarding_page.dart` | Penafian "bukan alat medis" |
 
-Fitur tambahan: **Saran AI** (§17) — kartu "Minta saran" di Dashboard (saat Mode AI) dan
+Fitur resmi **Saran AI** (DOCS_SPEC §8.9, SAI-01..03) — kartu "Minta saran" di Dashboard (saat Mode AI) dan
 Statistik; lewat backend `POST /ai/advice` (key Gemini hanya di server), hanya angka ringkasan
 yang dikirim, saran statis bila gagal/429/offline. `.env` tidak lagi menjadi asset aplikasi.
 
@@ -140,7 +143,7 @@ lib/
 │   ├── help/         (domain, presentation) — Bantuan & FAQ (ikon bantuan di setiap layar)
 │   ├── onboarding/   (presentation)
 │   ├── calibration/  (application, presentation)
-│   ├── ai_assistant/ (data, application, presentation) — Saran AI (§17)
+│   ├── ai_assistant/ (data, application, presentation) — Saran AI (§8.9)
 │   ├── calibration/  (data, application, presentation)
 │   ├── credits/      (domain, data, application, presentation) — ApiCreditRepository (+ tiruan), beli via Midtrans, S-09
 │   ├── monitoring/   (data, application, presentation)

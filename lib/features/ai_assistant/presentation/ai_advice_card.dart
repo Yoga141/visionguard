@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../application/ai_advice_provider.dart';
 import '../data/ai_advice_repository.dart';
 
-/// Kartu "Saran AI" (DOCS_SPEC §17). Mengirim **hanya angka ringkasan**
+/// Kartu "Saran AI" (DOCS_SPEC §8.9). Mengirim **hanya angka ringkasan**
 /// ([AdviceMetrics]) lewat [AiAdviceRepository]; bila key kosong/gagal,
 /// repository mengembalikan saran statis, dan kartu ini juga memakai saran
 /// statis bila terjadi error tak terduga.

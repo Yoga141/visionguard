@@ -99,14 +99,16 @@ Role akun di DB: `ENUM('user','admin')`.
 | Pembayaran | **Midtrans Snap** | QRIS, e-wallet, VA |
 | Version control | Git + GitHub | — |
 | Email | SMTP | Reset kata sandi |
+| Saran AI | **Google Gemini API** (`gemini-2.0-flash`) lewat Laravel | 2–3 saran praktis dari angka ringkasan (§8.9) |
 
 ### 4.3 Komunikasi & keamanan [SRS 3.4, SDD 3.2]
-- Klien ↔ server: **REST JSON over HTTPS (TLS ≥ 1.2)**. Server ↔ Midtrans/email: HTTPS/TLS.
+- Klien ↔ server: **REST JSON over HTTPS (TLS ≥ 1.2)**. Server ↔ Midtrans/email/Gemini: HTTPS/TLS.
 - Setiap request membawa **token Laravel Sanctum**; token disimpan di **penyimpanan aman** perangkat.
 - Kata sandi di-hash **bcrypt**.
 - Notifikasi Midtrans diverifikasi dengan **signature key SHA-512** sebelum diproses (kunci: Signature Secret Key, lihat §8.4 & §16 #30).
 - Pengingat = **notifikasi lokal** (tanpa push service), tetap jalan offline.
 - Data yang boleh dikirim ke server: **akun, order, status hari pemantauan, ringkasan statistik angka**. Gambar **tidak pernah**.
+- Ke Gemini (lewat server) hanya **angka ringkasan** Saran AI (§8.9); `GEMINI_API_KEY` hanya di `.env` server.
 - **Sinkronisasi**: ringkasan harian yang belum tersinkron disimpan lokal, dikirim otomatis saat online kembali.
 
 ### 4.4 Izin platform [SDD 3.2]
@@ -117,6 +119,8 @@ Role akun di DB: `ENUM('user','admin')`.
 ### 4.5 Distribusi [SDD 3.2]
 Windows: installer `.exe`/MSIX · macOS: `.dmg` bertanda tangan · Android: Google Play · iOS: TestFlight → App Store.
 
+**Keputusan v1.0 (23 Nov 2026, §16 #36):** versi ini didistribusikan **di luar toko** — APK langsung (Android) dan installer Windows — dengan pembayaran **Midtrans**. Rilis ke **Google Play / App Store wajib memakai Google Play Billing / In-App Purchase** untuk pembelian kredit (barang digital); Midtrans tetap untuk distribusi di luar toko.
+
 ### 4.6 Arsitektur [SDD 2.1, Gambar 2.1]
 Klien–server dengan **edge AI**:
 ```
@@ -126,6 +130,7 @@ Lapisan Aplikasi --> SQLite Lokal
 Lapisan Aplikasi --> Antarmuka (layar, pop-up, tray)
 Lapisan Aplikasi --HTTPS JSON (akun, kredit, statistik angka)--> Laravel REST API + Panel Admin (VPS)
 Laravel --> MySQL ; Laravel <--transaksi--> Midtrans ; Laravel --> Layanan Email
+Laravel --angka ringkasan (Saran AI)--> Gemini API
 ```
 Aliran frame **berhenti di CV Engine**.
 
@@ -133,7 +138,7 @@ Aliran frame **berhenti di CV Engine**.
 
 ## 5. Kebutuhan Fungsional [SRS 4, Tabel 4]
 
-Modul: **AKN** Akun · **KLB** Kalibrasi · **PMT** Pemantauan · **PNG** Pengingat · **STK** Statistik · **KRD** Kredit & Pembayaran · **PGT** Pengaturan · **ADM** Admin.
+Modul: **AKN** Akun · **KLB** Kalibrasi · **PMT** Pemantauan · **PNG** Pengingat · **STK** Statistik · **KRD** Kredit & Pembayaran · **PGT** Pengaturan · **ADM** Admin · **SAI** Saran AI (fitur resmi sejak 23 Nov 2026, belum ada di SRS v1.0 — §18 R2).
 
 | ID | Kebutuhan | Prioritas |
 |---|---|---|
@@ -172,6 +177,9 @@ Modul: **AKN** Akun · **KLB** Kalibrasi · **PMT** Pemantauan · **PNG** Pengin
 | ADM-01 | Admin tambah/ubah/nonaktifkan paket kredit | Sedang |
 | ADM-02 | Admin lihat data pengguna & transaksi | Sedang |
 | ADM-03 | Admin sesuaikan kredit manual dengan alasan tercatat | Rendah |
+| SAI-01 | Minta 2–3 saran kesehatan mata dari angka ringkasan (Dashboard saat Mode AI, Statistik, hasil Sesi Cek Mata) | Rendah |
+| SAI-02 | AI gagal / dinonaktifkan / offline / batas tercapai → tampilkan saran statis menurut level skor | Rendah |
+| SAI-03 | Batas **10 permintaan/jam/pengguna**; gratis (tidak memakai kuota/kredit) | Rendah |
 
 ---
 
@@ -308,6 +316,24 @@ Menu utama: **Dashboard, Statistik, Kredit, Pengaturan**. Tiap pengingat ditutup
 - Penjelasan privasi + penafian medis sebelum kamera pertama aktif; tolak → **Mode Timer**; izin dapat diberikan kembali dari Pengaturan.
 - Indikator kamera aktif selalu tampil.
 
+### 8.9 Saran AI (Gemini) [fitur tambahan resmi, sebelumnya §17]
+- **Tujuan:** 2–3 saran singkat & praktis berbahasa Indonesia dari ringkasan metrik. **Bukan diagnosis medis**; penafian §1.2 berlaku dan prompt sistem melarang diagnosis.
+- **Data yang dikirim — hanya angka** (`AdviceMetrics` di `lib/features/ai_assistant/data/ai_advice_repository.dart`):
+
+  | Field | Tipe | Sumber |
+  |---|---|---|
+  | `fatigue_score` | int 0–100 | §9.4 (§16 #7) |
+  | `blink_rate` | float, kedipan/menit (opsional) | §9.2 |
+  | `perclos` | float 0..1 (opsional) | §9.2 |
+  | `distance_cm` | float (opsional; null bila kalibrasi jarak dilewati) | §9.3 |
+  | `screen_minutes` | int (opsional) | menit menatap layar tanpa istirahat |
+
+- **DILARANG** mengirim frame, gambar, video, landmark, EAR mentah, nama, email, atau ID pengguna ke layanan AI (§4.3, §8.8, §15).
+- **Jalur:** klien → `POST /ai/advice` (token Sanctum, §11.2) → Laravel `GeminiAdviceService` → Gemini. Server tidak menyimpan/me-log prompt & respons. `GEMINI_API_KEY` hanya di `backend/.env`.
+- **Batas & gratis:** 10/jam/pengguna (`AI_ADVICE_MAX_PER_HOUR`) → 429; tidak memakai kuota/kredit (§16 #22).
+- **Fallback:** error apa pun (401/422/429/503/offline) → saran statis menurut level skor (§9.4) dan ambang pengingat (§9.5).
+- **Pengembangan saja:** build debug dengan `USE_REMOTE_API=false` + `--dart-define=GEMINI_API_KEY=...` memanggil Gemini langsung (`DirectGeminiAdviceRepository`). Nilai dart-define tertanam di build itu → jangan bagikan build tersebut; `.env` tidak pernah menjadi asset Flutter (key yang dulu ikut ter-bundle harus dirotasi).
+
 ---
 
 ## 9. Algoritma CV Engine [SDD 2.5]
@@ -395,7 +421,7 @@ Urutan tabel = **urutan prioritas**. Bila beberapa kondisi terjadi bersamaan →
 - Use case admin (`Mengelola Paket Kredit`, `Melihat Data Pengguna & Transaksi`, `Menyesuaikan Kredit Manual`) **<<include>>** `Login`.
 - `Membeli Paket Kredit` melibatkan aktor **Midtrans**; `Reset Kata Sandi` melibatkan **Layanan Email**.
 
-### 10.2 Daftar use case (24)
+### 10.2 Daftar use case (25)
 
 | UC | Nama | Aktor | Prasyarat | Alur utama (ringkas) | Alternatif | Sukses / Gagal |
 |---|---|---|---|---|---|---|
@@ -423,8 +449,12 @@ Urutan tabel = **urutan prioritas**. Bila beberapa kondisi terjadi bersamaan →
 | UC-22 | Kelola Paket Kredit | Admin | Login panel | Menu Paket → tambah/ubah/nonaktifkan → isi nama, kredit, harga → validasi & simpan → paket aktif tampil di app | Invalid → error; paket pernah dibeli hanya bisa dinonaktifkan | Tersimpan / invalid |
 | UC-23 | Lihat Pengguna & Transaksi | Admin | Login panel | Menu Pengguna/Transaksi → filter status & tanggal → daftar → detail | Tak ada data → tabel kosong + keterangan | Tampil / gangguan server |
 | UC-24 | Sesuaikan Kredit Manual | Admin | Login, buka detail pengguna | Isi delta & alasan → validasi alasan & saldo akhir → simpan ledger `adjustment` → saldo terbaru | Alasan kosong → tolak; saldo akhir negatif → tolak | Tercatat / ditolak |
+| UC-25 | Meminta Saran AI | Pengguna (+Layanan AI Gemini) | Login, ada skor kelelahan (Dashboard/Statistik/hasil Sesi Cek Mata) | "Minta saran" → susun `AdviceMetrics` (angka saja) → `POST /ai/advice` → server memanggil Gemini → tampilkan saran | 429/503/offline/error → saran statis | Saran AI / saran statis |
 
 ### 10.3 Alur kunci (detail dari activity & sequence diagram)
+
+**Saran AI (UC-25, §8.9)**
+Kartu Saran AI → `AiAdviceRepository.getAdvice(metrics)`: bawaan `ApiAiAdviceRepository` → `POST /ai/advice` (Sanctum) → `AiAdviceController` → `GeminiAdviceService` (hanya angka §8.9) → teks saran. Gagal → saran statis. Tidak ada penyimpanan baru (kecuali penghitung rate limit).
 
 **Kalibrasi (Seq 4.20, Activity 4.6)**
 Setujui privasi & izin → `CalibrationService.mulaiKalibrasi()` → `CameraSource.start()` → loop **10 detik**: frame → `FaceAnalyzer` → landmark mata → hitung **baseline EAR & ambang** → minta duduk di jarak acuan → loop **sampai wajah stabil** (ukur iris **5 detik**; tidak stabil → ulang) → ukur lebar iris (px) → hitung **focal length** → simpan ke **DB lokal (`calibrations`)** → "kalibrasi berhasil" → Dashboard. Tidak setuju/izin ditolak → Mode Timer.
@@ -484,6 +514,7 @@ Setujui privasi & izin → `CalibrationService.mulaiKalibrasi()` → `CameraSour
 | `POST /payments/midtrans/notification` | Endpoint notifikasi Midtrans (Payment Notification URL di dashboard) |
 | `GET /orders/{order_code}` | Muat ulang status order (UC-19 alur notifikasi terlambat) |
 | `GET /me` | Profil/role (opsional) |
+| `POST /ai/advice` (AiAdviceController, token, throttle `ai-advice`) | UC-25 Saran AI. Body angka §8.9 → **200** `{ "advice": "…" }`; **401**; **422** field tidak valid; **429** > 10/jam; **503** key kosong / Gemini gagal |
 
 Halaman web (bukan API): `/payments/finish`, `/payments/unfinish`, `/payments/error` (tujuan redirect Snap → "kembali ke aplikasi"), `/payments/simulate/{order_code}` (mode simulasi saja), `/reset-password/{token}` (form sandi baru dari email).
 
@@ -629,6 +660,7 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | `ApiClient` | `-token: String`; `get(path)`, `post(path, body)` | HTTP ke server |
 | `MetricsRepository` | `saveSample(m: Metrics)`, `dailySummary(d: Date): DailySummary` | Metrik lokal |
 | `SyncService` | `syncPending()` | Sinkron ringkasan ke server |
+| `AiAdviceRepository` | `getAdvice(m: AdviceMetrics): String` | Saran AI lewat `POST /ai/advice`, fallback saran statis (§8.9) |
 
 **Aturan desain**: `MonitoringSession` bergantung pada **antarmuka `FaceAnalyzer`**, bukan MediaPipe langsung → model bisa diganti & diuji dengan data tiruan.
 
@@ -680,6 +712,8 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 8. Indikator "kamera aktif" wajib tampil kapan pun kamera menyala; penafian medis wajib di onboarding.
 9. Pengingat: satu sekaligus sesuai prioritas, hormati cooldown, tunda, dan Mode Fokus; pop-up desktop tidak mengambil fokus keyboard; auto-hilang 15 detik.
 10. Unit test: cakupan **≥ 70%** untuk modul CV dan aturan kredit (PML-01).
+11. Saran AI hanya mengirim **angka ringkasan** §8.9; key Gemini hanya di server.
+12. RuleEngine dievaluasi **tiap 1 detik** dengan metrik terakhir (KNR-03); skor tetap tiap 10 detik (§16 #35).
 
 ---
 
@@ -700,10 +734,10 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 11 | KDL-02: di mobile pemantauan **berhenti saat layar mati**. | Pastikan foreground service berhenti saat layar off. **Diterapkan (Tahap E):** `MainActivity.kt` mengirim `ACTION_SCREEN_OFF` lewat EventChannel → `MonitoringController.stopForScreenOff()` (semua mode) → service ikut berhenti. |
 | 12 | KLB-04: `calibrations` per `camera_id`; kamera diganti → minta kalibrasi ulang. | Simpan `camera_id` dan bandingkan saat kamera dibuka. |
 | 13 | Kode sempat memakai **Firebase** (Auth + Firestore) untuk login & log metrik, di luar SDD Tabel 3.1. | **Keputusan pengguna (29 Okt 2026): Firebase tidak dipakai.** Backend tetap **Laravel + Sanctum + MySQL** (§4.2, §11, §12). Kode & konfigurasi Firebase sudah dihapus. |
-| 14 | Fitur **Saran AI (Gemini)** tidak ada di SRS/SDD v1.0. | Dipertahankan sebagai fitur tambahan, lihat **§17**. SRS/SDD perlu direvisi. |
+| 14 | Fitur **Saran AI (Gemini)** tidak ada di SRS/SDD v1.0. | **Keputusan pengguna (23 Nov 2026): fitur resmi.** Isi §17 dipindahkan ke §4.2, §4.3, §4.6, §5 (SAI-01..03), §8.9, §10 (UC-25), §11.2, §13.1, §15. SRS/SDD tetap perlu direvisi (§18 R2). |
 | 15 | Tabel `alerts` tidak punya kolom hasil verifikasi istirahat 20-20-20 (§9.6 "catat terverifikasi / tidak"). | **Keputusan pengguna (31 Okt 2026):** terverifikasi (atau Mode Timer, verifikasi dilewati) → `action = followed` (dihitung `breaks_taken`); tidak terverifikasi → `dismissed`. Skema §12.3 tidak berubah. |
 | 16 | Durasi **Mode Fokus** tidak ditentukan (§9.7 hanya "pilih durasi"). | **Keputusan pengguna (31 Okt 2026): 30 / 60 / 90 / 120 menit** (`CvConstants.focusOptionsMin`). Sementara dimulai dari **Dashboard** karena system tray belum ada. |
-| 17 | Detail interaksi pengingat yang tidak dirinci SDD. | **Diterapkan:** cooldown dimulai saat pengingat benar-benar tampil (bukan saat ditahan Tunda/Fokus); jarak & BR harus di bawah ambang **terus-menerus** (dilacak per frame, diputuskan tiap 10 dtk); pada 20-20-20, tombol **Oke** memulai hitung mundur 20 dtk; 20-20-20 yang diabaikan juga mereset timer (agar tidak muncul berulang), yang ditunda muncul lagi setelah masa tunda; notifikasi sistem dikirim bila diaktifkan, bila tidak didukung/izin ditolak tetap pop-up; bila pop-up & notifikasi sama-sama dimatikan, pengingat tidak tampil. |
+| 17 | Detail interaksi pengingat yang tidak dirinci SDD. | **Diterapkan:** cooldown dimulai saat pengingat benar-benar tampil (bukan saat ditahan Tunda/Fokus); jarak & BR harus di bawah ambang **terus-menerus** (dilacak per frame, diputuskan tiap 1 dtk sejak #35); pada 20-20-20, tombol **Oke** memulai hitung mundur 20 dtk; 20-20-20 yang diabaikan juga mereset timer (agar tidak muncul berulang), yang ditunda muncul lagi setelah masa tunda; notifikasi sistem dikirim bila diaktifkan, bila tidak didukung/izin ditolak tetap pop-up; bila pop-up & notifikasi sama-sama dimatikan, pengingat tidak tampil. |
 | 18 | Skema §12.2 tidak punya waktu pembuatan order, padahal riwayat UC-20 menampilkan tanggal. Kolom bawaan Laravel (`updated_at`, `remember_token`, `email_verified_at`) juga tidak ada di §12.2. | **Diterapkan (Tahap A, 16 Nov 2026):** tambah `orders.created_at`. Selain itu 7 tabel persis §12.2: `users` hanya punya `created_at`, kolom sandi `password_hash` (model `User` memakai `$authPasswordName`). Tabel bawaan Laravel (`personal_access_tokens`, `password_reset_tokens`, `sessions`, `cache`, `jobs`) tetap ada. FK `orders.package_id` = RESTRICT (paket pernah dibeli tidak bisa dihapus, §8.6). |
 | 19 | §8.7 tidak menyebut nasib `monitoring_days` & `credit_ledger` saat hapus akun, padahal ledger append-only. | **Diterapkan:** `users`, `devices`, `daily_stats`, semua token dihapus; `orders`, `credit_ledger`, `monitoring_days` dianonimkan (`user_id` → NULL lewat FK `ON DELETE SET NULL`; `monitoring_days.device_id` → NULL). Ini satu-satunya perubahan pada baris ledger lama; model `CreditLedger` menolak update/delete. |
 | 20 | Format & path endpoint usulan §11.2/§17.4 belum final (#8, #9). | **Disetujui pengguna (16 Nov 2026), kontrak di `API_CONTRACT.md`:** respons JSON datar (tanpa `data`), error `{message, errors}`. Path: `POST /auth/logout`, `GET /me`, `GET /credit-packages`, `GET /credits/history` (order + ledger sekaligus, tanpa `GET /orders` terpisah), `POST /ai/advice`. `GET /stats` memakai parameter `range=7\|30` (bawaan 7). `POST /stats/daily` menerima batch `{device_id, summaries:[...]}` maks. 31 hari. Path notifikasi Midtrans & reset sandi ditetapkan di Tahap B. |
@@ -719,108 +753,52 @@ Relasi: sessions 1–* metric_samples, sessions 1–* alerts.
 | 30 | Midtrans mengganti model access key (docs.midtrans.com/docs/access-keys): Server Key (otorisasi API), Client Key (klien), Signature Secret Key (verifikasi notifikasi), Merchant ID (identitas). SDD/§8.4 lama memakai server key untuk signature. | **Diterapkan (16 Nov 2026, atas arahan pengguna):** `MIDTRANS_SIGNATURE_SECRET_KEY` → `config('services.midtrans.signature_secret_key')` (di-trim & dibersihkan seperti key lain); signature notifikasi & Status API = SHA512(order_id + status_code + gross_amount + secret). Secret kosong → fallback Server Key + `Log::warning` (sekali per proses). Basic auth API tetap Server Key. `MIDTRANS_MERCHANT_ID` opsional (tidak divalidasi). Key boleh berisi `~` dan `.`. Idempotensi tetap via `UNIQUE(credit_ledger.order_id)` + kunci baris order. |
 | 31 | Indeks landmark §9.2–9.3 ditulis SDD tanpa menyebut versi model; cara menghitung yaw, jalur fallback, dan platform yang didukung tidak diatur. | **Diterapkan (Tahap D, 23 Nov 2026, jalur dipilih pengguna: `tflite_flutter` + MediaPipe):** model `face_detector.tflite` (BlazeFace short range 128×128, 896 anchor) + `face_landmarks_detector.tflite` (Face Mesh V2, 256×256 → `Identity` 1×1×1×1434 = 478×(x,y,z) dalam piksel potongan, `Identity_1` logit kehadiran wajah → sigmoid ≥ 0,5; `Identity_2` tidak dipakai) dari `face_landmarker.task`. **Verifikasi indeks:** mesh kanonik di dalam bundel (`geometry_pipeline_metadata_landmarks.binarypb`, 468 verteks) menunjukkan mata kanan 33 (sudut luar, x −4,45) / 133 (sudut dalam, x −1,86), kelopak atas 160 & 158 tepat di atas kelopak bawah 144 & 153 (x −3,67 & −2,72); mata kiri 362/385/387/263/373/380 simetris. Jadi p1..p6 §9.2 benar dan pasangan EAR (p2–p6, p3–p5) vertikal. Iris 468–477 tidak ada di mesh kanonik: menurut topologi MediaPipe, 468/473 = pusat, 469–472 & 474–477 = 4 titik kontur berurutan, sehingga 469↔471 dan 474↔476 adalah diameter (horizontal) yang berseberangan; nilai §9.3 dipertahankan, perlu dicek ulang di perangkat. **Yaw** = atan2(Δz, Δx) pipi 234→454 di ruang potongan (roll sudah dihapus ROI). ROI = sisi terpanjang × 1,5, diputar mengikuti garis mata; frame berikutnya dilacak dari landmark, detektor hanya saat wajah hilang. **Platform:** Android & iOS memakai MediaPipe; Windows/macOS → `DummyFaceAnalyzer` berlabel "Mode simulasi — alasan" karena `camera_windows` 0.3.x tidak punya image stream. Model gagal dimuat (batas 15 dtk) → juga mode simulasi. Konstanta di `cv_constants.dart`. |
 | 32 | PMT-06/S-11 tidak merinci perilaku tutup jendela, pengingat saat tersembunyi, Jeda/Lanjut, dan batas latar belakang Android. | **Diterapkan (Tahap E, 23 Nov 2026; paket & perilaku Android dipilih pengguna):** Windows: tutup jendela = sembunyi ke tray (sekali muncul notifikasi penjelasan), Keluar dari menu tray menutup sesi lalu keluar. Selama jendela tersembunyi / aplikasi mobile di latar (`appInBackgroundProvider`), pengingat **selalu** dikirim lewat notifikasi sistem walau notifikasi dimatikan di Pengaturan (pop-up tidak terlihat). **Jeda/Lanjut** (`pause`/`resume`) menutup baris `sessions` dan membuka yang baru saat lanjut, agar waktu jeda tidak dihitung sebagai waktu layar; tidak ada aktivasi ulang. Android: foreground service tipe `camera` hanya selama Mode AI berjalan (bukan Mode Timer/jeda), `stopWithTask`. **Batasan:** `camera_android_camerax` mengikat kamera ke lifecycle Activity, sehingga frame berhenti saat aplikasi tidak terlihat; pemantauan otomatis dijeda lewat PMT-05 dan kamera menyala lagi saat aplikasi kembali. Kamera di latar butuh implementasi native di service (ditunda). |
-| 33 | UC-11 tidak merinci cara menghitung BR/PERCLOS/skor sesi 2 menit, perilaku wajah tak terdeteksi, dan penyimpanan. | **Diterapkan:** BR = total kedipan ÷ durasi sesi; PERCLOS = frame valid dengan EAR < τ ÷ frame valid (seluruh sesi, bukan jendela 60 dtk); jarak = rata-rata; skor = `FatigueScorer` dengan T = durasi sesi (2 mnt). Frame valid < 70% → "wajah kurang terdeteksi", tidak disimpan. Butuh kalibrasi + Hari Pemantauan AI aktif (tombol aktivasi memakai §8.2). Pemantauan yang berjalan dihentikan dulu (kamera satu pemakai). Keluar halaman / aplikasi ke latar / tombol Batalkan sebelum selesai → batal, **tidak ada baris yang ditulis**. Selesai → `sessions(mode='check')` + 1 `metric_samples` (masuk ringkasan harian). Saran memakai kartu Saran AI (§17). |
+| 33 | UC-11 tidak merinci cara menghitung BR/PERCLOS/skor sesi 2 menit, perilaku wajah tak terdeteksi, dan penyimpanan. | **Diterapkan:** BR = total kedipan ÷ durasi sesi; PERCLOS = frame valid dengan EAR < τ ÷ frame valid (seluruh sesi, bukan jendela 60 dtk); jarak = rata-rata; skor = `FatigueScorer` dengan T = durasi sesi (2 mnt). Frame valid < 70% → "wajah kurang terdeteksi", tidak disimpan. Butuh kalibrasi + Hari Pemantauan AI aktif (tombol aktivasi memakai §8.2). Pemantauan yang berjalan dihentikan dulu (kamera satu pemakai). Keluar halaman / aplikasi ke latar / tombol Batalkan sebelum selesai → batal, **tidak ada baris yang ditulis**. Selesai → `sessions(mode='check')` + 1 `metric_samples` (masuk ringkasan harian). Saran memakai kartu Saran AI (§8.9). |
 | 34 | PGT-02 tidak menentukan mekanisme autostart. | **Diterapkan:** Windows `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` nilai `VisionGuard` = `"<exe>" --autostart` lewat `reg.exe` (per pengguna, tanpa admin); `--autostart` → aplikasi langsung bersembunyi ke tray. Registri = sumber kebenaran; cermin di `settings` kunci `autostart`. `launch_at_startup` tidak dipakai (bentrok `win32` 6 dari `flutter_secure_storage`). macOS belum. |
-| 35 | KNR-03 meminta pengingat muncul ≤ **2 detik** setelah kondisi terpenuhi, tetapi PMT-04/Seq 4.22 memutuskan pengingat pada evaluasi **tiap 10 detik** (§16 #7, #17). | **Terbuka (temuan audit Tahap F).** Implementasi saat ini: pengingat AI tampil pada evaluasi 10 detik berikutnya setelah durasi kondisi terpenuhi (jeda ≤ 10 dtk); pengingat 20-20-20 Mode Timer diperiksa tiap detik. Rekomendasi: revisi KNR-03 menjadi "≤ 2 detik setelah evaluasi yang memenuhi kondisi", atau ubah keputusan pengingat menjadi per frame. Perlu keputusan pengguna. |
-| 36 | Pembelian kredit (konten digital yang dipakai di dalam aplikasi) lewat Midtrans di browser tidak dibahas terhadap kebijakan toko aplikasi. | **Terbuka (temuan audit Tahap F).** Kebijakan Pembayaran Google Play mewajibkan Google Play Billing untuk barang/layanan digital yang dibeli di aplikasi yang didistribusikan lewat Play; pedoman App Store 3.1.1 mewajibkan In-App Purchase. Midtrans aman untuk distribusi di luar toko (APK langsung, installer Windows §4.5) atau setelah memeriksa program sistem tagihan alternatif yang berlaku. Sebelum rilis toko: pilih Play Billing/IAP untuk build toko, atau distribusi di luar toko. Perlu keputusan pengguna. |
+| 35 | KNR-03 meminta pengingat muncul ≤ **2 detik** setelah kondisi terpenuhi, tetapi PMT-04/Seq 4.22 memutuskan pengingat pada evaluasi **tiap 10 detik** (§16 #7, #17). | **Keputusan pengguna & diterapkan (23 Nov 2026):** skor kelelahan & PERCLOS tetap dihitung **tiap 10 detik** (`SessionEvaluator`, sesuai SDD), tetapi **RuleEngine dievaluasi setiap 1 detik** (`MonitoringController.tickScreenTimer`) memakai metrik terakhir (skor terakhir, jarak & BR frame terakhir, status 20-20-20). Durasi kondisi jarak/BR tetap dilacak per frame. Pengingat muncul ≤ 2 detik setelah kondisi terpenuhi (≤ 1 dtk detak + median iris ±0,5 dtk). Saat wajah hilang > 10 dtk (PMT-05) tidak ada evaluasi pengingat AI. Test: `reminders_test.dart` grup "Integrasi Mode AI (KNR-03)". **Selesai.** |
+| 36 | Pembelian kredit (konten digital yang dipakai di dalam aplikasi) lewat Midtrans di browser tidak dibahas terhadap kebijakan toko aplikasi. | **Keputusan pengguna (23 Nov 2026):** versi ini didistribusikan **di luar toko** (APK langsung & installer Windows) dengan pembayaran Midtrans (§4.5). **Rilis ke Google Play / App Store wajib memakai Google Play Billing / In-App Purchase** untuk pembelian kredit (kebijakan Pembayaran Google Play; App Store Guideline 3.1.1); kredit tetap dicatat di ledger server setelah verifikasi pembelian di server. Masuk pekerjaan lanjutan `HANDOFF.md` §7. **Diputuskan.** |
 | 37 | PML-01 meminta coverage ≥ 70% untuk modul CV & aturan kredit, termasuk server. | **Diukur (Tahap F, 23 Nov 2026):** Flutter `lib/cv_engine/` 77,5%, `lib/features/credits/` 88,7% (seluruh `lib/` 61,0%). Backend: 91 feature test lulus, tetapi coverage **tidak dapat diukur** karena PHP (Herd 8.5) tanpa Xdebug/PCOV; pasang salah satu lalu `php artisan test --coverage`. KNR-01/02, AKR-01/02, USB-01, KDL-02 (baterai) belum diukur karena butuh perangkat & data uji berlabel. |
 
 ---
 
-## 17. Fitur Tambahan di Luar SRS/SDD v1.0 — Saran AI (Gemini)
+## 17. Saran AI (Gemini) — dipindahkan
 
-> **Status:** fitur tambahan atas keputusan pengguna (29 Okt 2026), **belum tercantum di SRS/SDD v1.0**. Bagian ini menjadi acuan sampai SRS/SDD direvisi (lihat §18). **Diterapkan:** server `POST /ai/advice` (Tahap A, kontrak disetujui 16 Nov 2026 di `API_CONTRACT.md`), klien memakainya secara bawaan sejak Tahap C. Isi bagian ini **belum** dipindahkan ke §4/§5/§10/§11 — menunggu persetujuan pengguna.
+> **Keputusan pengguna (23 Nov 2026):** Saran AI menjadi **fitur resmi**. Isinya dipindahkan ke bagian utama;
+> nomor bagian ini dipertahankan agar rujukan lama tetap valid.
 
-### 17.1 Tujuan
-- Memberi **2–3 saran singkat dan praktis** dalam Bahasa Indonesia untuk menjaga kesehatan mata, berdasarkan ringkasan metrik pemantauan.
-- **Bukan diagnosis medis.** Penafian medis §1.2 tetap berlaku, dan prompt sistem melarang diagnosis.
-- Bila AI dinonaktifkan, offline, atau gagal, app menampilkan **saran statis** menurut level skor (§9.4) dan ambang pengingat (§9.5).
-
-### 17.2 Data yang dikirim (hanya angka)
-| Field | Tipe | Sumber |
-|---|---|---|
-| `fatigue_score` | int 0–100 | §9.4 (dibulatkan, §16 #7) |
-| `blink_rate` | float, kedipan/menit (opsional) | §9.2 |
-| `perclos` | float 0..1 (opsional) | §9.2 |
-| `distance_cm` | float (opsional; null bila kalibrasi jarak dilewati) | §9.3 |
-| `screen_minutes` | int (opsional) | menit menatap layar tanpa istirahat |
-
-- **DILARANG** mengirim frame, gambar, video, landmark, EAR mentah, nama, email, atau ID pengguna ke layanan AI (§4.3, §8.8, §15.1).
-- Implementasi: `AdviceMetrics` di `lib/features/ai_assistant/data/ai_advice_repository.dart`.
-
-### 17.3 Alur
-1. Pengguna menekan "Minta saran" pada kartu Saran AI: Dashboard (saat Mode AI), Statistik, dan hasil Sesi Cek Mata (Tahap E).
-2. App menyusun `AdviceMetrics` dari state pemantauan terakhir.
-3. `AiAdviceRepository.getAdvice(metrics)`:
-   - **Pengembangan** (`ApiConstants.useRemoteApi == false`, build debug): `DirectGeminiAdviceRepository` memanggil Gemini langsung dengan key dari `--dart-define=GEMINI_API_KEY` (bukan lagi `.env`).
-   - **Final** (`useRemoteApi == true`): `ApiAiAdviceRepository` memanggil `POST /ai/advice` dengan token Sanctum. Server Laravel yang memanggil Gemini.
-4. Respons teks ditampilkan. Jika gagal, saran statis ditampilkan.
-
-### 17.4 Endpoint — `POST /ai/advice` (✅ diterapkan, kontrak disetujui)
-> Sudah dibangun di `backend/` (Tahap A) dengan batas 10/jam/pengguna, lihat §16 #22 dan `API_CONTRACT.md`. Sejak Tahap C klien memakainya secara bawaan.
-- Auth: token Sanctum.
-- Request:
-  ```json
-  { "fatigue_score": 45, "blink_rate": 9.5, "perclos": 0.08, "distance_cm": 42, "screen_minutes": 35 }
-  ```
-- Respons **200 OK**: `{ "advice": "• Kedipkan mata perlahan 10 kali..." }`
-- Usulan kode error:
-  - **401**: token tidak valid.
-  - **422**: field tidak valid.
-  - **429**: batas pemakaian tercapai — **10 permintaan/jam/pengguna** (`AI_ADVICE_MAX_PER_HOUR`, §16 #22).
-  - **503**: layanan AI tidak tersedia.
-
-  Klien memakai saran statis untuk semua error.
-- Server menyimpan `GEMINI_API_KEY` di `.env` Laravel, tidak pernah di klien. Server tidak menyimpan prompt/respons kecuali diputuskan lain.
-
-### 17.5 Risiko API key di klien
-- **Status (Tahap C, 16 Nov 2026): diatasi.** `.env` sudah **dihapus dari asset Flutter** dan `flutter_dotenv` dilepas; Saran AI bawaan lewat `POST /ai/advice`. Panggilan Gemini langsung hanya untuk build debug dengan `--dart-define=GEMINI_API_KEY=...` (nilai dart-define tetap tertanam di build itu, jadi jangan bagikan build debug tersebut).
-- Sebelumnya `.env` didaftarkan sebagai **asset Flutter** sehingga `GEMINI_API_KEY` **ikut ter-bundle** di setiap build dan **dapat diekstrak**. Bila key lama pernah ikut build yang dibagikan, rotasi key tersebut.
-- Konsekuensinya: penyalahgunaan kuota/biaya atas nama proyek, dan key tidak bisa dicabut per pengguna.
-- Mitigasi:
-  1. Pemanggilan langsung **hanya untuk pengembangan lokal**; jangan distribusikan build yang memuat key.
-  2. Batasi key di Google AI Studio/Cloud Console (kuota, pembatasan API).
-  3. Rotasi key bila pernah ikut dalam build yang dibagikan.
-  4. Versi rilis **wajib** memakai `POST /ai/advice`, lalu `.env` dihapus dari asset. **Selesai (Tahap C).**
-
-### 17.6 Revisi SRS/SDD yang diperlukan
-- **SRS**:
-  - Tambah kebutuhan fungsional baru (mis. kode `SAI-01..`: minta saran, fallback statis, batas pemakaian).
-  - Tambah use case baru "Meminta Saran AI" beserta aktor **Layanan AI (Gemini)** sebagai sistem eksternal.
-  - Perbarui SRS 3.3/3.4 (antarmuka perangkat lunak dan komunikasi).
-  - Perbarui bagian privasi: data angka ringkasan dikirim ke pihak ketiga melalui server.
-  - Tentukan apakah fitur ini gratis atau memakai kuota/kredit (§8.1).
-- **SDD**:
-  - Tabel 3.1: tambah Gemini API.
-  - Gambar 2.1: tambah Laravel ↔ Gemini.
-  - Tabel 2.2/DFD: proses baru, tanpa penyimpanan baru kecuali log pemakaian.
-  - Sequence diagram baru "Saran AI".
-  - Daftar endpoint: `POST /ai/advice` (AiAdviceController).
-  - Diagram kelas klien (Gambar 4.1): `AiAdviceRepository`.
-- **DOCS_SPEC.md**: setelah revisi disetujui, pindahkan isi §17 ke bagian terkait (§4.2, §5, §10, §11) dan hapus status "tambahan". **Perlu persetujuan pengguna**; daftar lengkap revisi ada di §18.
+| Isi lama | Sekarang di |
+|---|---|
+| §17.1 Tujuan, §17.2 Data yang dikirim, §17.5 Risiko key | **§8.9** |
+| Stack Gemini | §4.2, §4.3, §4.6 |
+| Kebutuhan | §5 **SAI-01..03** |
+| §17.3 Alur | §10.2 **UC-25**, §10.3 |
+| §17.4 Endpoint `POST /ai/advice` | §11.2 (kontrak lengkap: `API_CONTRACT.md`) |
+| Kelas klien | §13.1 `AiAdviceRepository` |
+| Kepatuhan | §15 butir 11 |
+| §17.6 Revisi SRS/SDD | §18 R2 |
 
 ---
 
 ## 18. Daftar Revisi SRS/SDD yang Disarankan (Tahap F, 23 Nov 2026)
 
-Ringkasan dari §16 & §17 agar SRS/SDD v1.1 sesuai implementasi. Kolom "Sumber" menunjuk butir §16.
+Ringkasan keputusan §16 (dan Saran AI §8.9) agar SRS/SDD v1.1 sesuai implementasi. Kolom "Sumber" menunjuk butir §16.
 
 | # | Topik | Usulan revisi | Dokumen | Sumber |
 |---|---|---|---|---|
 | R1 | Diagram use case | Email ↔ Reset Kata Sandi, Admin ↔ Login; aktor Gambar 4 = Admin; Menghentikan Pemantauan tidak include aktivasi | SRS Gbr 1, 2, 4 | #1–#3 |
-| R2 | Saran AI (Gemini) | Kebutuhan baru `SAI-01..` (minta saran, fallback statis, batas 10/jam, gratis), UC "Meminta Saran AI", aktor Layanan AI; SDD Tabel 3.1, Gbr 2.1, sequence baru, kelas `AiAdviceRepository`; privasi: hanya angka ringkasan lewat server | SRS 3.3/3.4/4, SDD 2–4 | #14, #22, §17 |
+| R2 | Saran AI (Gemini) — fitur resmi | Tambah SAI-01..03 & UC-25 "Meminta Saran AI" dengan aktor Layanan AI; SRS 3.3/3.4 (antarmuka & komunikasi) dan privasi (angka ringkasan ke pihak ketiga lewat server); SDD Tabel 3.1 (Gemini API), Gbr 2.1 (Laravel ↔ Gemini), DFD tanpa penyimpanan baru, sequence "Saran AI", endpoint `POST /ai/advice`, Gbr 4.1 `AiAdviceRepository`. DOCS_SPEC **sudah** dipindahkan (§8.9 dst.) | SRS 3.3/3.4/4, SDD 2–4 | #14, #22, §8.9 |
 | R3 | Sensitivitas → τ | Rendah 0,65 · Sedang 0,70 (bawaan) · Tinggi 0,75 × baseline EAR | SRS PGT-01, SDD Tabel 2.4 | #5 |
 | R4 | Interval 20-20-20 | Dapat diatur 10–60 menit, bawaan 20 | SDD Tabel 2.6 | #4 |
 | R5 | Mode Fokus & interaksi pengingat | Durasi 30/60/90/120 mnt; cooldown dimulai saat tampil; kondisi jarak/BR terus-menerus; Oke memulai hitung mundur; aturan notifikasi vs pop-up; selama jendela tersembunyi selalu notifikasi | SRS PNG-06, SDD 2.5.4 | #16, #17, #32 |
 | R6 | Hasil verifikasi istirahat | `alerts.action` followed/dismissed sebagai hasil verifikasi (tanpa kolom baru) | SDD Tabel 3.9 | #15 |
 | R7 | Penghalusan & evaluasi | Median iris 1 dtk; skor `int` tiap 10 dtk; jeda wajah hilang > 10 dtk | SDD 2.5 | #6, #7, #10 |
-| R8 | KNR-03 vs evaluasi 10 dtk | Selaraskan ukuran "≤ 2 detik" dengan evaluasi 10 detik | SRS Tabel 5 | #35 (terbuka) |
+| R8 | KNR-03 vs evaluasi 10 dtk | Seq 4.22/PMT-04: skor tiap 10 dtk, **RuleEngine tiap 1 dtk** dengan metrik terakhir (≤ 2 dtk) | SDD 2.5.4, Seq 4.22 | #35 (diterapkan) |
 | R9 | Path endpoint final | `POST /auth/register`, `/auth/login`, `/auth/logout`, `/auth/forgot-password`, `/auth/reset-password`; `GET`/`DELETE /me`; `POST /monitoring-days/activate`; `GET /credits/status`, `/credits/history`, `/credit-packages`; `POST /orders`, `GET /orders/{order_code}`; `POST /payments/midtrans/notification`; `POST /stats/daily` (batch ≤ 31 hari), `GET /stats?range=7\|30`; `POST /ai/advice`. Web: `/payments/finish\|unfinish\|error`, `/payments/simulate/{order_code}`, `/reset-password/{token}`. Format JSON datar di `API_CONTRACT.md` | SDD daftar endpoint | #8, #9, #20, #26, #27 |
 | R10 | Skema server | `orders.created_at`; kolom sandi `password_hash`; FK `orders.package_id` RESTRICT; hapus akun = anonimkan order/ledger/monitoring_days | SDD Tabel 3.2–3.8 | #18, #19 |
 | R11 | Akun & keamanan | Sandi 8–72; `timezone` IANA; perangkat (user, platform, device_name); penahanan login per email+IP → 429 + `retry_after`; reset sandi lewat halaman web, cabut token | SRS AKN, KMN-02 | #21, #27 |
 | R12 | Statistik multi-perangkat | `GET /stats` menjumlahkan durasi/pengingat, rata-rata ditimbang `screen_minutes` | SDD 3.3 | #23 |
 | R13 | Midtrans | Model access key baru (Server Key otorisasi, Signature Secret Key verifikasi notifikasi); mode simulasi untuk demo (ditolak di produksi); aturan status & idempotensi | SDD 3.3, Seq 4.25 | #25, #26, #30 |
-| R14 | Pembayaran di toko aplikasi | Tentukan Play Billing/IAP untuk build toko atau distribusi di luar toko | SRS 2.1/KRD-02, SDD 3.2/4.5 | #36 (terbuka) |
+| R14 | Pembayaran & distribusi | v1.0 di luar toko (APK langsung, installer Windows) + Midtrans; rilis Google Play/App Store wajib Play Billing/IAP untuk kredit (verifikasi pembelian di server → ledger) | SRS 2.1/KRD-02, SDD 3.2/4.5 | #36 (diputuskan) |
 | R15 | Model CV | MediaPipe Face Landmarker (BlazeFace 128 + Face Mesh V2 256, 478 titik); yaw dari kedalaman pipi 234/454; indeks mata terverifikasi | SDD 2.5, Tabel 3.1 | #31 |
 | R16 | Dukungan platform CV | Windows memakai mode simulasi selama `camera_windows` tanpa image stream | SRS 2.4, PRT-01 | #31 |
 | R17 | Latar belakang | Tray Windows (tutup = sembunyi); foreground service Android hanya Mode AI; batasan kamera Android saat aplikasi tidak terlihat; layar mati → berhenti | SRS PMT-06, KDL-02 | #11, #32 |

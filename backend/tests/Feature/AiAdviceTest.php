@@ -7,7 +7,7 @@ use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
-/** POST /ai/advice — DOCS_SPEC §17 (Gemini di-mock dengan Http::fake). */
+/** POST /ai/advice — DOCS_SPEC §8.9 (Gemini di-mock dengan Http::fake). */
 class AiAdviceTest extends TestCase
 {
     use RefreshDatabase;

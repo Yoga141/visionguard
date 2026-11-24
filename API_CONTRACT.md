@@ -430,7 +430,7 @@ Bila beberapa perangkat mengirim hari yang sama: `screen_minutes`, `alerts_count
 
 ---
 
-## Saran AI (DOCS_SPEC §17)
+## Saran AI (DOCS_SPEC §8.9, UC-25)
 
 ### POST /ai/advice
 

@@ -3,7 +3,7 @@
 namespace App\Http\Requests;
 
 /**
- * POST /ai/advice — DOCS_SPEC §17.2. Hanya angka ringkasan; field lain
+ * POST /ai/advice — DOCS_SPEC §8.9. Hanya angka ringkasan; field lain
  * (mis. nama, email, gambar) tidak pernah diteruskan ke Gemini karena
  * controller hanya memakai `validated()`.
  */

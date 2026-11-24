@@ -7,7 +7,7 @@ import '../data/ai_advice_repository.dart';
 import '../data/api_ai_advice_repository.dart';
 import '../data/gemini_service.dart';
 
-/// Sumber Saran AI (DOCS_SPEC §17.3):
+/// Sumber Saran AI (DOCS_SPEC §8.9, UC-25):
 /// - Bawaan: backend `POST /ai/advice` (key Gemini hanya di server).
 /// - `USE_REMOTE_API=false` + build **debug**: Gemini langsung dengan key dari
 ///   `--dart-define=GEMINI_API_KEY=...` (khusus pengembangan; tanpa key → saran statis).

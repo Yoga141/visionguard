@@ -8,8 +8,11 @@ import 'package:visionguard/core/constants/cv_constants.dart';
 import 'package:visionguard/core/database/app_database.dart';
 import 'package:visionguard/core/database/database_providers.dart';
 import 'package:visionguard/cv_engine/camera_source.dart';
+import 'package:visionguard/cv_engine/cv_providers.dart';
 import 'package:visionguard/cv_engine/distance_estimator.dart';
 import 'package:visionguard/cv_engine/dummy_face_analyzer.dart';
+import 'package:visionguard/features/calibration/application/calibration_controller.dart';
+import 'package:visionguard/features/calibration/data/calibration_repository.dart';
 import 'package:visionguard/features/monitoring/application/monitoring_controller.dart';
 import 'package:visionguard/features/monitoring/data/alert_repository.dart';
 import 'package:visionguard/features/monitoring/data/session_repository.dart';
@@ -47,6 +50,29 @@ class FakeNotifier implements SystemNotifier {
 
   @override
   Future<void> cancel() async => cancelled++;
+}
+
+/// Kamera tiruan yang frame-nya dikirim manual (timestamp sintetis).
+class ManualCameraSource extends CameraSource {
+  final _ctrl = StreamController<CameraFrame>.broadcast();
+  bool _on = false;
+
+  void emit(DateTime t) => _ctrl.add(CameraFrame(width: 640, height: 480, timestamp: t));
+
+  @override
+  Stream<CameraFrame> get frames => _ctrl.stream;
+  @override
+  Future<void> start() async => _on = true;
+  @override
+  Future<void> stop() async => _on = false;
+  @override
+  CameraFailure get failure => CameraFailure.none;
+  @override
+  bool get usingRealCamera => _on;
+  @override
+  bool get streamingRealFrames => _on;
+  @override
+  String get cameraId => 'manual-cam';
 }
 
 void main() {
@@ -406,6 +432,64 @@ void main() {
     }
     expect(d, lessThan(CvConstants.minDistanceMobileCm));
     expect(d, lessThan(CvConstants.minDistanceDesktopCm));
+  });
+
+  // ------------------------------------------------ KNR-03: evaluasi tiap 1 detik
+  group('Integrasi Mode AI (KNR-03, §16 #35)', () {
+    late AppDatabase db;
+    late ProviderContainer c;
+    late ManualCameraSource camera;
+    late DummyFaceAnalyzer analyzer;
+
+    setUp(() async {
+      db = memoryDb();
+      camera = ManualCameraSource();
+      analyzer = DummyFaceAnalyzer(simulatedFocalPx: 600);
+      c = ProviderContainer(overrides: [
+        appDatabaseProvider.overrideWithValue(db),
+        systemNotifierProvider.overrideWithValue(FakeNotifier()),
+        cameraSourceProvider.overrideWithValue(camera),
+        faceAnalyzerProvider.overrideWithValue(analyzer),
+      ]);
+      await c.read(calibrationRepositoryProvider).save(cameraId: 'manual-cam', earBaseline: 0.3, focalPx: 600);
+      await c.read(calibrationControllerProvider.notifier).restoreSaved(cameraId: 'manual-cam');
+    });
+    tearDown(() async {
+      await c.read(monitoringControllerProvider.notifier).stop();
+      c.dispose();
+      await db.close();
+    });
+
+    /// Mengirim frame 10 fps dari [from] sampai sebelum [to].
+    Future<void> feed(DateTime from, DateTime to) async {
+      for (var t = from; t.isBefore(to); t = t.add(const Duration(milliseconds: 100))) {
+        camera.emit(t);
+        await Future<void>.delayed(Duration.zero);
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    test('terlalu dekat: pengingat muncul ≤ 2 dtk setelah 10 dtk terpenuhi, bukan menunggu evaluasi skor',
+        () async {
+      final m = c.read(monitoringControllerProvider.notifier);
+      expect(await m.startAi(), StartAiOutcome.started);
+      final t0 = DateTime.now().add(const Duration(hours: 1));
+      // Mula-mula jarak normal (skor pertama dihitung di sini), lalu terlalu dekat.
+      await feed(t0, t0.add(const Duration(seconds: 3)));
+      analyzer.simulateTooClose = true;
+      final close = t0.add(const Duration(seconds: 3));
+      await feed(close, close.add(const Duration(milliseconds: 9500)));
+
+      m.tickScreenTimer(now: close.add(const Duration(milliseconds: 9500)));
+      expect(c.read(reminderControllerProvider).active, isNull, reason: 'belum 10 detik');
+
+      await feed(close.add(const Duration(milliseconds: 9500)), close.add(const Duration(milliseconds: 11000)));
+      // Detak berikutnya setelah kondisi 10 detik terpenuhi (median 1 dtk menunda
+      // deteksi ±0,5 dtk) — dalam batas 2 detik KNR-03. Evaluasi skor berikutnya
+      // baru di t0 + 20 dtk; sebelum #35 pengingat menunggu sampai saat itu.
+      m.tickScreenTimer(now: close.add(const Duration(milliseconds: 11000)));
+      expect(c.read(reminderControllerProvider).active?.type, ReminderType.distance);
+    });
   });
 
   // ------------------------------------------------ MonitoringController + 20-20-20

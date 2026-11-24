@@ -8,7 +8,7 @@ use App\Http\Requests\AiAdviceRequest;
 use App\Services\GeminiAdviceService;
 use Illuminate\Http\JsonResponse;
 
-/** POST /ai/advice — DOCS_SPEC §17.4. Rate limit per pengguna lewat `throttle:ai-advice`. */
+/** POST /ai/advice — DOCS_SPEC §8.9 & §11.2. Rate limit per pengguna lewat `throttle:ai-advice`. */
 class AiAdviceController extends Controller
 {
     public function store(AiAdviceRequest $request, GeminiAdviceService $gemini): JsonResponse

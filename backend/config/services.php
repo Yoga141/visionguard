@@ -49,7 +49,7 @@ return [
         'timeout' => (int) env('MIDTRANS_TIMEOUT', 15),
     ],
 
-    // Saran AI (DOCS_SPEC §17.4). Key hanya di backend/.env, tidak pernah di klien.
+    // Saran AI (DOCS_SPEC §8.9 & §11.2). Key hanya di backend/.env, tidak pernah di klien.
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
         'model' => env('GEMINI_MODEL', 'gemini-2.0-flash'),
